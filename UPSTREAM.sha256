@@ -1,0 +1,183 @@
+# UPSTREAM.sha256 — integrity record for the utf8proc fork
+#
+# 56 records, one `<hex>  <path>` line each, in sha256sum format. Check with:
+#
+#     sha256sum -c UPSTREAM.sha256
+#
+# sha256sum ignores every line starting with `#`, so this header travels with
+# the record and costs nothing at check time.
+#
+# ---------------------------------------------------------------------------
+# WHAT THIS RECORD IS
+# ---------------------------------------------------------------------------
+#
+# It pins the bytes this repository carries that this fork did not write: the
+# whole native core, upstream's complete test suite, upstream's build and
+# tooling files, upstream's licence text, and the Unicode conformance fixtures
+# in `testdata/`. Any later edit to any of those 56 files makes the check fail
+# loudly, which is the point: the compiled bytes, the replayed corpora and the
+# licence text all have to stay the bytes this record names.
+#
+# It is NOT a signature, NOT a Git object id, and NOT a re-derivation from
+# upstream commit 79cdd5ab40c79afa559f689ffc13b76812dee1ac. It is a hash of
+# this working tree as measured on 2026-10-03. See UPSTREAM.md for what the
+# tree-to-commit anchor rests on, and for the separate git-blob cross-check.
+#
+# ---------------------------------------------------------------------------
+# TWO ORIGINS IN ONE FILE, NAMED EXPLICITLY
+# ---------------------------------------------------------------------------
+#
+# 50 records are utf8proc upstream bytes at tag v2.12.0 = 79cdd5ab40c79afa559f689ffc13b76812dee1ac:
+#
+#     utf8proc.h  utf8proc.c  utf8proc_data.c   -- the compiled core, 3 files, 1 TU
+#     LICENSE.md  README.upstream.md  NEWS.md  MANIFEST  lump.md  Doxyfile
+#     Makefile  CMakeLists.txt  utils.cmake  libutf8proc.pc.in
+#     libutf8proc.pc.cmakein  cmake/utf8proc-config.cmake.in
+#     test/**     (19 files)  -- upstream's own C test suite, kept whole
+#     bench/**    (6 files)   -- kept for provenance, never compiled; see NOTICE.md
+#     data/**     (4 files)   -- upstream's Julia generator path, never compiled
+#     .github/dependabot.yml  .github/workflows/{zig,make,cmake,ci-fuzz}.yml
+#     appveyor.yml            -- upstream's CI, kept for audit, never run here
+#
+# 6 records are Unicode, Inc. data files fetched by this fork from unicode.org
+# on 2026-10-03 and stored byte for byte. They are NOT utf8proc upstream bytes,
+# and no upstream .paths entry shipped them -- `data/Makefile`'s `clean:` target
+# deletes them, which is exactly why this fork commits them:
+#
+#     testdata/NormalizationTest.txt       https://www.unicode.org/Public/18.0.0/ucd/NormalizationTest.txt
+#     testdata/GraphemeBreakTest.txt      https://www.unicode.org/Public/18.0.0/ucd/auxiliary/GraphemeBreakTest.txt
+#     testdata/DerivedCoreProperties.txt  https://www.unicode.org/Public/18.0.0/ucd/DerivedCoreProperties.txt
+#     testdata/Unicode-License-V3.txt     https://www.unicode.org/license.txt
+#
+# and 2 are derived from one of those by upstream's own recorded extraction rule
+# (`data/Makefile:53-57`), not hand-written:
+#
+#     testdata/Lowercase.txt   section of DerivedCoreProperties.txt
+#     testdata/Uppercase.txt   section of DerivedCoreProperties.txt
+#
+# Both derived files terminate in a bare `# Total code points:` line with no
+# count and no trailing newline. That is upstream's `print(match(...))` output
+# verbatim. A parser must tolerate it; do not "fix" the files.
+#
+# The five data files are under the Unicode Terms of Use, NOT under utf8proc's
+# MIT grants. Nothing in this record says otherwise, and no claim of "the whole
+# tree is MIT" is made anywhere in this package. See NOTICE.md.
+#
+# ---------------------------------------------------------------------------
+# WHAT IS DELIBERATELY NOT HERE, AND WHY
+# ---------------------------------------------------------------------------
+#
+# Four upstream files are excluded because this fork edits them in place, so
+# they are no longer byte-identical to upstream and a digest here would be false
+# within hours. Their upstream-pristine digests, measured before the first edit,
+# are recorded in UPSTREAM.md so the anchor survives:
+#
+#     build.zig       extended in place by the fork's build definition
+#     build.zig.zon   extended in place: .version, .fingerprint, .paths
+#     .gitignore      upstream's 44 lines kept, fork ignore rules appended
+#     README.md       replaced in place by the fork's README; upstream's exact
+#                     bytes are carried whole at README.upstream.md, which is
+#                     the path the record below names, with the same digest
+#
+# Also absent, by role rather than by origin -- every one of these is a
+# fork-authored file, and the only licence asserted over any of them is the MIT
+# grant in FORK-LICENSE.md, which covers the fork's own files and nothing else:
+#
+#     UPSTREAM.md  UPSTREAM.sha256  NOTICE.md  README.zig.md  FORK-NOTES.md
+#     CHANGELOG.md  README.md  FORK-LICENSE.md
+#     package.nix  flake.nix  devenv.nix  devenv.yaml  .envrc
+#     .github/workflows/verify.yml
+#     cross-test.profile.sh  zig/**  tests.zig  smoke.zig  consumer/**
+#
+# `.zig-cache/`, `zig-out/` and `.git/` are build output and VCS metadata and are
+# never recorded.
+#
+# ---------------------------------------------------------------------------
+# HOW THE DIGESTS WERE PRODUCED
+# ---------------------------------------------------------------------------
+#
+# Read each file as raw bytes and hash with SHA-256 (hashlib.sha256 over the
+# byte string, in one call, no encoding step) on 2026-10-03. Same method for
+# every record. No shell hashing command and no git command produced these
+# lines. A tree walk over the repository reported no symlinks and no
+# non-regular entries, so each record is the digest of that file's own bytes
+# and not of a link target.
+#
+# ---------------------------------------------------------------------------
+# CHECKING THIS IN AN UNPACKED PACKAGE
+# ---------------------------------------------------------------------------
+#
+# This record is written for the working tree, and it is deliberately a
+# superset of what a dependent receives: `build.zig.zon` `.paths` is what
+# travels. In a fetched package the upstream paths outside `.paths` will be
+# reported missing by `sha256sum -c`; that is expected, not a failure of the
+# record. The paths that MUST be in `.paths` for the package to build and for
+# its tests to embed their corpora are the native core (`utf8proc.h`,
+# `utf8proc.c`, `utf8proc_data.c`), `LICENSE.md`, `README.upstream.md`, all six
+# `testdata/` files, `build.zig` and `build.zig.zon`.
+#
+# ---------------------------------------------------------------------------
+# STATUS
+# ---------------------------------------------------------------------------
+#
+# SOURCE-CONFIRMED / PENDING-VERIFICATION. These digests were measured, not
+# validated by a gate. No `sha256sum -c UPSTREAM.sha256` run is claimed by this
+# file. The driver runs that gate; until it does, the verification section of
+# README.zig.md carries no observed result for it.
+#
+f38438eb986ba7eedad0f2e820a70fae1aaf05197364ba0381a5e84775099ef8  utf8proc.c
+08da85e820efaa3613500946c26b2dc427a07f76001ed7c16bc90f298b814c35  utf8proc.h
+b4911d4162d216afa612317a9b981851e15d672f4d93b25f3a1eb986f8c0aedb  utf8proc_data.c
+3b510150d34f248a221bb88e1d811238d6c6c18b51231822c42974c39bb07256  LICENSE.md
+105b8cf218f3e1493e14067b4c73b857c1c978c652d98fcfc070371b29c54576  README.upstream.md
+a1073f0d9840840887ccbca3da6bddf0b7180ae775c224b04ad0319b84c3f3f5  NEWS.md
+4856efb77a3caee7385cf9aef3500be68411ce2b050fd37f2ea07bebc7f02abc  MANIFEST
+d2c9163ce9e0f0a73cd8829576ce9f625541aa82c59502309fe7c6b352584f29  lump.md
+0e19c8d2119a907342cb47fb1b6f75712cbb6dffc94b754d09826f98be3d7776  Doxyfile
+74c8314ff6784c784f0032f904b923f23e7721f0d1d20c7781f7bb2174a457b8  Makefile
+6058b0450cabbbd543cf6e55da67f64c1e492071d7da27879b0c2dc4e5116f88  CMakeLists.txt
+0704a84a2f74587b90a0d83a33ad6952be3ef95dad4dd0226cca7ebbaa1ce95c  utils.cmake
+2c462f3ae40cc0905097f44f146ffcb7af39a04ef5febda38b310e49718d334c  libutf8proc.pc.in
+726cb104601d0ef682fc86d1acfeae1d56a870bffceaf37e77578562bc487833  libutf8proc.pc.cmakein
+754d291e1a357de2a3009ea27c3d651918c95b89d2629b2f99203b03838593d5  cmake/utf8proc-config.cmake.in
+8d64ed1762be601e612076a37af185853f3decc329aa8011e6cbfd557634923d  test/app/CMakeLists.txt
+12a46a9af9d83ca1051e3e54c37735fe7b0356fd332ac284bc5fb49c3bc6deef  test/app/app.c
+20cd305b8ed27a68a5571e4b80049c9ec4a6233b26056b86e6ac64d51d0f703a  test/case.c
+2aa0be1295dd40aa791b3a901ea9fd04cb773d9d3086c003ec11365fb684d7a1  test/charwidth.c
+6280bd7f621c37b3e2a0e0e8132363f1aa47534771ed22ffbcef8a9bc5086036  test/custom.c
+62e1e24ba50a3ef36441424d4c8004a61a9647eb128e12f0097c7f7a2fe321e1  test/fuzz_main.c
+dc4e86d6d567db2618d65e2359419247809a0713db2a3515c281613de168f456  test/fuzzer.c
+3db9c300ec7665f546d5c1c9bb7c1255907b8ebf259f259f7d4e43c5f574158f  test/graphemetest.c
+9cde30d81b616eb990286660ad1078c2aba6f984b2918a08314c049b353a6af5  test/install_uninstall.sh
+f1dad16eacf89e873946b939311793f0dfdc4f8752c2786e2e3601f084845869  test/iscase.c
+4e8fbf0d06f6a446bc44781e70ee402478b8cd64258f6f5fdadfc11e4bfdcfac  test/iterate.c
+93fa6ebd494caebc2a7fe3dbe40f2458116bf7ce6cb32b1785deaf5c9d419f8f  test/maxdecomposition.c
+85b635a11daf5b99f6f921a4371b817411642fc6d69d2de4a53a8f0165322295  test/misc.c
+43930034777e195e3051c162e861b4d9360bd0c6f175a883a0de9d713ee68d38  test/normtest.c
+082cfd5be7fae6434a5ee97e162bfe51dc744102a1c76be556247f19dda7800b  test/ossfuzz.sh
+af8c1642bc33262d8414a5a587390ecbb8b82bab78576f103f936a6c31ec51a2  test/printproperty.c
+353cffb8ab3f05a138f68a124d4ebb886d3921fc409729751ca2e0daf5926c4b  test/tests.c
+d785da222376aba62925aae22050b20cf828c22f5e8ca28ae0e6a4380a73e0cf  test/tests.h
+2508646137fbbaa7a55b468cc94ebe359cc48d8ae7f723824c676e333e918aa3  test/valid.c
+4cb67c4b074a849dc530127e92df32bf27cd92eb9a03a453363cec211c652fa9  bench/Makefile
+ce5566baccd75c3a9241faf526aab71aebc25bce03820dae482710013e96ae92  bench/bench.c
+3a95b24729699490bf0d12b0b104eeb2e932d1269d77573475f05c8fb99877dd  bench/icu.c
+d2aa24638e9a4ea0608399cb12823c319d47bee24c8d2090eae465c4043d13ea  bench/unistring.c
+fd257b940c9f811147ca2e001ba35869328aee685294a28b2f07ac5b43bf3dc1  bench/util.c
+951f6a6034e03f7b7558e58759fdc07ab921f716a5b2e5a32c75f9b2ddb794cf  bench/util.h
+b24b3dba3d3bec30ced26a72ea7406355d22f61f26216c62a8707681176465d6  data/Makefile
+973c2f17b24a7a8056d68447ec620cd51284e65d5ef225267d78ddd74a4c0cb5  data/Project.toml
+87091281fdf0e4f151f5d041a517c197d77696eec290914cbb6299ae20c61d53  data/data_generator.jl
+cfb30c2672e2f065482f02e69a61b1ead81e02908968e5deb0dac6996e049dea  data/download.sh
+3cc283f357f31e2d403245f869213fcdf3c9dea290d9fadcf7e8d127a348d410  .github/dependabot.yml
+f59b7e456a5acea529941bd2b2ea5659618c4aadc642b4942ecb05d9ee39c426  .github/workflows/ci-fuzz.yml
+63901c351a965da798140af61e96a4f13afccdaf610ca287147acc8495373176  .github/workflows/cmake.yml
+38b97f270d5734fb766a3ec889b48047381452849e64e458fdcda439d501c972  .github/workflows/make.yml
+a378c2f764db5f69acd7b465238a856052cfc1d71ab6250fda219c5493839d5a  .github/workflows/zig.yml
+f983f74b752f8fac857611e1969bbff8f3d745ad2d2974f2a8d121177f95f5d1  appveyor.yml
+25a50d816764b04abfb4a646d3eb2b2a803284c3873d9a06757b94fe4513dde3  testdata/NormalizationTest.txt
+b0cf047ee94485bbdc846de2b902f5f8a815f6b674f9d04223cddadd91c9df31  testdata/GraphemeBreakTest.txt
+09c928886a178fcafd93c29e4bd59073a058e5a100b716d425cb563ab50f68c9  testdata/DerivedCoreProperties.txt
+aca4346d0eb2601ccc18beb1eaedaf3269feb2f3df26f18e3970e45f16563e84  testdata/Lowercase.txt
+c0823767d0fb71c7bf3f5cf38554748950bd9b95426f89859a706bf93d3a3921  testdata/Uppercase.txt
+e7a93b009565cfce55919a381437ac4db883e9da2126fa28b91d12732bc53d96  testdata/Unicode-License-V3.txt

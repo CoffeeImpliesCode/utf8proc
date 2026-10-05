@@ -1,0 +1,25 @@
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2026 the utf8proc Zig SDK fork authors
+#
+# devenv's input declaration for this SDK. Written by the provenance role on
+# 2026-10-04.
+#
+# A revision, not a branch. `devenv-nixpkgs/rolling` is what a branch name would
+# look like, and a development shell that changes under you between two runs of
+# the same command cannot be the reason a result moved. Pinning costs a lock
+# update when a toolchain genuinely needs one, and that update is a visible act.
+#
+# This is the nixpkgs *input devenv resolves*, and it is a different input from
+# the one `flake.nix` declares: there, `nixpkgs` is NixOS/nixpkgs at
+# c7def046b9a883d46974757852106483d741586f, because a flake package has to name
+# the package set it derives from directly. Both revisions are written down
+# rather than inherited from a neighbour, because a neighbouring lock is not a
+# pin.
+#
+# THERE IS NO `devenv.lock` IN THIS DIRECTORY. The lock is the driver's to
+# write, this role writes no lock file, and a lock written here would be a guess
+# about hashes nobody has fetched. Until one exists, `devenv shell` resolves the
+# revision above directly.
+inputs:
+  nixpkgs:
+    url: github:cachix/devenv-nixpkgs/c2f38fe7f9e04d9aadd354d380f2bd40531d9737

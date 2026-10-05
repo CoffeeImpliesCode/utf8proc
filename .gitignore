@@ -1,0 +1,91 @@
+*.tar.gz
+*.exe
+*.dll
+*.do
+*.o
+*.so*
+*.a
+*.dll
+*.dylib
+*.dSYM
+*.out
+*.new
+.vscode
+/data/*.txt
+/data/*.ttf
+/data/*.sfd
+/docs/
+/bench/bench
+/bench/icu
+/bench/unistring
+/test/normtest
+/test/graphemetest
+/test/printproperty
+/test/charwidth
+/test/misc
+/test/valid
+/test/iterate
+/test/case
+/test/iscase
+/test/custom
+/test/maxdecomposition
+/tmp/
+/mingw_static/
+/mingw_shared/
+/msvc_shared/
+/msvc_static/
+/build/
+Manifest.toml
+NEWS-update.jl
+libutf8proc.pc
+
+# clangd
+/.cache/
+/compile_commands.json
+
+# Zig build output
+#
+# Added by this fork; every rule above is upstream's and is kept verbatim. The
+# four entries are needed because upstream 2.12.0's `.gitignore` has no Zig
+# entries at all -- it predates this package's `build.zig` being extended --
+# while it does ignore C build products by name.
+#
+# Each is root-anchored or explicitly prefixed, so no upstream rule is widened
+# and none is removed. In particular the `*.a`, `*.so*`, `*.dll`, `*.dylib`,
+# `*.exe`, `*.o`, `*.out` and `*.new` patterns above are unanchored, so they
+# match at any depth: they must keep matching here, because the fork's own
+# files may not be excluded by an upstream convention, and no fork file ends
+# in one of those extensions. The fork's record files are written directly
+# under their final names; `UPSTREAM.sha256.new` is never created.
+#
+# `/data/*.txt` and `/tmp/` and `/build/` above are root-anchored, so none of
+# them reaches `testdata/`: the committed Unicode corpora are not ignored, and
+# no pattern in the file above matches any path under `testdata/`.
+/.zig-cache/
+/zig-out/
+/consumer/.zig-cache/
+/consumer/zig-out/
+
+# Nix and devenv working-tree artefacts
+#
+# Added by this fork for the standalone Nix and devenv delivery, on the same
+# terms as the Zig block above: nothing upstream is removed, and every entry is
+# root-anchored so no upstream unanchored pattern is widened.
+#
+# `nix build` writes `result`, and `result-1`, `result-2`, ... on a rebuild,
+# into the directory that asked for it. `devenv` writes its resolved inputs and
+# its state beside the project as `.devenv/`, `.devenv.flake.nix` and
+# `.devenv.flakes/`, and `devenv.local.nix` is the per-developer override it
+# reads. None of them is named in `build.zig.zon`'s `.paths`, so an ignored path
+# cannot become package content either.
+#
+# `flake.lock` and `devenv.lock` are deliberately *not* here: they are real
+# inputs, they belong to the driver, and ignoring them would be the wrong way to
+# keep a lock out of a commit. Upstream's unanchored `*.out` and `/build/` above
+# match none of these names.
+/result
+/result-*
+/.devenv/
+/.devenv.flake.nix
+/.devenv.flakes/
+/devenv.local.nix

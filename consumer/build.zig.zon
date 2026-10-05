@@ -1,0 +1,34 @@
+// SPDX-License-Identifier: MIT
+
+.{
+    // The package id for this consumer. It is the library's name with a
+    // `_consumer` suffix because it is a distinct package with a distinct
+    // fingerprint, not a second version of the library.
+    .name = .utf8proc_consumer,
+    // This package is not published and carries no upstream version; the
+    // version is the identity of the proof, not of a release.
+    .version = "0.1.0",
+
+    // Persistent identity for this consumer, distinct from the library.
+    // Keep it unchanged when modifying this package.
+    .fingerprint = 0x99023fc438b383d5,
+
+    .minimum_zig_version = "0.16.0",
+
+    .dependencies = .{
+        // A relative path, not a registry or archive URL. This package exists
+        // to prove that `dep.module("utf8proc")` resolves from outside the
+        // package that defines it; resolving that through a registry would make
+        // the proof depend on a published state of the world.
+        //
+        // The dependency key is `utf8proc`, which is the manifest's own
+        // `.name`, so `b.dependency("utf8proc", ...)` is what this file writes.
+        .utf8proc = .{ .path = ".." },
+    },
+
+    .paths = .{
+        "build.zig",
+        "build.zig.zon",
+        "src",
+    },
+}
