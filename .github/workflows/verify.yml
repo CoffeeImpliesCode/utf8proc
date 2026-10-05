@@ -93,7 +93,7 @@ jobs:
       # the property worth proving. The property worth proving is narrower and
       # stronger: **are the upstream files this repository carries still
       # upstream's bytes at that pin?**
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0
 
@@ -340,7 +340,7 @@ jobs:
     name: native build, tests, smoke and upstream suite
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: mlugg/setup-zig@v2
         with:
           version: 0.16.0
@@ -855,7 +855,7 @@ jobs:
           - riscv64-linux-gnu
           - wasm32-wasi
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: mlugg/setup-zig@v2
         with:
           version: 0.16.0
@@ -901,7 +901,7 @@ jobs:
           - x86_64-windows-gnu
           - riscv64-linux-gnu
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: mlugg/setup-zig@v2
         with:
           version: 0.16.0
@@ -925,7 +925,7 @@ jobs:
     name: a shared object a target cannot carry is refused
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: mlugg/setup-zig@v2
         with:
           version: 0.16.0
@@ -952,7 +952,7 @@ jobs:
     name: package closure and consumer package
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: mlugg/setup-zig@v2
         with:
           version: 0.16.0
