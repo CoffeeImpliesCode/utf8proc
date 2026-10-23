@@ -36,8 +36,6 @@
 #     test/**     (19 files)  -- upstream's own C test suite, kept whole
 #     bench/**    (6 files)   -- kept for provenance, never compiled; see NOTICE.md
 #     data/**     (4 files)   -- upstream's Julia generator path, never compiled
-#     .github/dependabot.yml  .github/workflows/{zig,make,cmake,ci-fuzz}.yml
-#     appveyor.yml            -- upstream's CI, kept for audit, never run here
 #
 # 6 records are Unicode, Inc. data files fetched by this fork from unicode.org
 # on 2026-10-03 and stored byte for byte. They are NOT utf8proc upstream bytes,
@@ -169,12 +167,10 @@ b24b3dba3d3bec30ced26a72ea7406355d22f61f26216c62a8707681176465d6  data/Makefile
 973c2f17b24a7a8056d68447ec620cd51284e65d5ef225267d78ddd74a4c0cb5  data/Project.toml
 87091281fdf0e4f151f5d041a517c197d77696eec290914cbb6299ae20c61d53  data/data_generator.jl
 cfb30c2672e2f065482f02e69a61b1ead81e02908968e5deb0dac6996e049dea  data/download.sh
-3cc283f357f31e2d403245f869213fcdf3c9dea290d9fadcf7e8d127a348d410  .github/dependabot.yml
 f59b7e456a5acea529941bd2b2ea5659618c4aadc642b4942ecb05d9ee39c426  .github/workflows/ci-fuzz.yml
 63901c351a965da798140af61e96a4f13afccdaf610ca287147acc8495373176  .github/workflows/cmake.yml
 38b97f270d5734fb766a3ec889b48047381452849e64e458fdcda439d501c972  .github/workflows/make.yml
 a378c2f764db5f69acd7b465238a856052cfc1d71ab6250fda219c5493839d5a  .github/workflows/zig.yml
-f983f74b752f8fac857611e1969bbff8f3d745ad2d2974f2a8d121177f95f5d1  appveyor.yml
 25a50d816764b04abfb4a646d3eb2b2a803284c3873d9a06757b94fe4513dde3  testdata/NormalizationTest.txt
 b0cf047ee94485bbdc846de2b902f5f8a815f6b674f9d04223cddadd91c9df31  testdata/GraphemeBreakTest.txt
 09c928886a178fcafd93c29e4bd59073a058e5a100b716d425cb563ab50f68c9  testdata/DerivedCoreProperties.txt
