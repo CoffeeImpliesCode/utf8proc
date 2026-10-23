@@ -5,7 +5,7 @@
 {
   description = "utf8proc — Unicode normalization, case-folding and grapheme segmentation, as a standalone Zig SDK";
 
-  inputs.nixpkgs.url = "github:NixOS/nixpkgs/c7def046b9a883d46974757852106483d741586f";
+  inputs.nixpkgs.url = "github:NixOS/nixpkgs/02c087f3fe673c9e317f206a627cb6b910336dbe";
 
   outputs = { self, nixpkgs }:
     let
@@ -13,7 +13,7 @@
       forAllSystems = f:
         nixpkgs.lib.genAttrs systems (system: f nixpkgs.legacyPackages.${system});
 
-      devTools = pkgs: with pkgs; [ zig_0_16 pkg-config gnumake ];
+      devTools = pkgs: with pkgs; [ zig_0_17 pkg-config gnumake ];
     in
     {
       # Use package.nix's source filter for both variants.
@@ -21,7 +21,7 @@
         pkgs:
         let
           mk = linkage: pkgs.callPackage ./package.nix {
-            zig = pkgs.zig_0_16;
+            zig = pkgs.zig_0_17;
             inherit linkage;
           };
         in

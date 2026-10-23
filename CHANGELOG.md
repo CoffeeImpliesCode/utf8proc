@@ -2,7 +2,7 @@
 
 Fork changes relative to utf8proc 2.12.0 (`79cdd5ab40c79afa559f689ffc13b76812dee1ac`); Unicode data 18.0.0.
 
-- Nested consumer builds forward the target query, CPU, optimize mode, linkage, runtime mode, caches, install prefix, and job width; non-runnable targets install instead of run.
+- Port to Zig 0.17.0.
 - Devenv build commands locate this SDK and use `ZIG_LOCAL_CACHE_DIR` and `ZIG_GLOBAL_CACHE_DIR`, filling missing values from `XDG_CACHE_HOME` or `TMPDIR`.
 - Added Nix `static` and `shared` outputs with `default` set to `static`.
 - Installed `libutf8proc.pc` uses a relocatable prefix and linkage-specific consumer flags.

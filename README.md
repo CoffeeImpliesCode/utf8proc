@@ -2,6 +2,7 @@
 
 A Zig facade and build package for the upstream utf8proc C library.
 Upstream release: 2.12.0; Unicode data version: 18.0.0.
+Requires Zig 0.17.0.
 
 ## Source deviations from upstream
 
@@ -11,7 +12,7 @@ Upstream release: 2.12.0; Unicode data version: 18.0.0.
 
 ## Build deviations from upstream
 
-- `build.zig` adds the facade, tests, smoke program, API exercise, target checks, upstream C tests, and consumer steps to the single C translation unit. The core links libc.
+- `build.zig` adds the facade, tests, smoke program, API exercise, target checks, upstream C tests, and a standalone consumer package to the single C translation unit. The core links libc.
 - `zig translate-c` translates `utf8proc.h`. Aro handles most targets; nine NetBSD, five OpenBSD, and `x86-windows` use their target C preprocessor first.
 - `upstream-test` builds nine upstream C tests. It excludes `charwidth` (host `wcwidth` comparison), `printproperty` (a property dumper), benchmarks, the Make-based installer, and fuzzers.
 - The build generates `libutf8proc.pc` from upstream's template and selects consumer flags for the chosen linkage.
@@ -36,11 +37,11 @@ Runtime loading is unavailable on WASI, Emscripten, and freestanding targets.
 
 ### Zig
 
-For a local checkout beside the consumer, add this to `build.zig.zon`:
+For a local dependency stored at `vendor/utf8proc`, add:
 
 ```zig
 .dependencies = .{
-    .utf8proc = .{ .path = "../utf8proc" },
+    .utf8proc = .{ .path = "vendor/utf8proc" },
 },
 ```
 

@@ -8,7 +8,7 @@
 let
   # Reuse package.nix's source filter.
   sdk = linkage: pkgs.callPackage ./package.nix {
-    zig = pkgs.zig_0_16;
+    zig = pkgs.zig_0_17;
     inherit linkage;
   };
 
@@ -77,15 +77,15 @@ let
 in
 {
   packages = [
-    pkgs.zig_0_16
+    pkgs.zig_0_17
     pkgs.pkg-config
     pkgs.gnumake
   ];
 
   assertions = [
     {
-      assertion = pkgs.zig_0_16.version == "0.16.0";
-      message = "utf8proc: this SDK is written against Zig 0.16.0 (pkgs.zig_0_16).";
+      assertion = pkgs.zig_0_17.version == "0.17.0";
+      message = "utf8proc: this SDK is written against Zig 0.17.0 (pkgs.zig_0_17).";
     }
   ];
 

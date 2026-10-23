@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # SPDX-License-Identifier: MIT
 # Defaults for cross-test.
-# The harness owns the published 53-platform Zig 0.16.0 Tier 1/2 matrix and runner policy.
+# The harness owns the published 53-platform Zig 0.17.0 Tier 1/2 matrix and runner policy.
 # No linkage override: build.zig's static default is used.
 # Set CROSS_LIBC_RUNTIMES externally when foreign libc loaders are needed.
 CROSS_BUILD_STEP=test

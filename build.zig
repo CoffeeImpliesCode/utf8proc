@@ -32,14 +32,14 @@ const c_flags = [_][]const u8{
 };
 const Macro = [2][]const u8;
 
-fn libraryMacros(linkage: std.builtin.LinkMode) []const Macro {
+fn libraryMacros(linkage: std.lang.LinkMode) []const Macro {
     return switch (linkage) {
         .static => &.{.{ "UTF8PROC_STATIC", "1" }},
         .dynamic => &.{.{ "UTF8PROC_EXPORTS", "1" }},
     };
 }
 
-fn consumerMacros(linkage: std.builtin.LinkMode) []const Macro {
+fn consumerMacros(linkage: std.lang.LinkMode) []const Macro {
     return switch (linkage) {
         .static => &.{.{ "UTF8PROC_STATIC", "1" }},
         .dynamic => &.{},
@@ -125,7 +125,7 @@ const Graph = struct {
     module: *std.Build.Module,
     consumer_macros: []const Macro,
     /// Delivered linkage; unsupported dynamic requests are refused.
-    linkage: std.builtin.LinkMode,
+    linkage: std.lang.LinkMode,
 };
 
 /// Whether this target can deliver a shared object; Windows DLLs are loadable without an ELF linker.
@@ -148,7 +148,7 @@ fn sharedObjectRefusal(b: *std.Build, target: std.Build.ResolvedTarget) ?[]const
 }
 
 /// Refuse unsupported dynamic linkage; never substitute a static archive.
-fn deliveredLinkage(b: *std.Build, target: std.Build.ResolvedTarget, requested: std.builtin.LinkMode) std.builtin.LinkMode {
+fn deliveredLinkage(b: *std.Build, target: std.Build.ResolvedTarget, requested: std.lang.LinkMode) std.lang.LinkMode {
     if (requested == .dynamic) {
         if (sharedObjectRefusal(b, target)) |reason| std.debug.panic("utf8proc: {s}", .{reason});
     }
@@ -194,24 +194,24 @@ fn preprocessedHeader(
         run.addArg(triple);
     }
     // Use the same package include root as the core and translator.
-    run.addPrefixedDirectoryArg("-I", b.path("."));
+    run.addDirectoryArg2(b.path("."), .{ .prefix = "-I" });
     // Apply consumer-side linkage macros to the preprocessor.
     for (macros) |macro| run.addArg(b.fmt("-D{s}={s}", .{ macro[0], macro[1] }));
     run.addArg("-o");
-    const preprocessed = run.addOutputFileArg("utf8proc-translate.c");
+    const preprocessed = run.addOutputFileArg2("utf8proc-translate.c", .{});
     run.addArg("-MD");
     // Track transitive headers for cache invalidation.
-    _ = run.addPrefixedDepFileOutputArg("-MF", "utf8proc-translate.d");
+    _ = run.addDepFileOutputArg2("utf8proc-translate.d", .{ .prefix = "-MF" });
     // Track the translation header as a direct input.
-    run.addFileArg(b.path(translate_header));
+    run.addFileArg2(b.path(translate_header), .{});
     return preprocessed;
 }
 
 const GraphOptions = struct {
     target: std.Build.ResolvedTarget,
-    optimize: std.builtin.OptimizeMode,
+    optimize: std.lang.Optimize,
     public: bool,
-    linkage: std.builtin.LinkMode,
+    linkage: std.lang.LinkMode,
     runtime_loaded: bool,
 };
 
@@ -301,7 +301,7 @@ fn addGraph(b: *std.Build, options: GraphOptions) Graph {
 fn facadeModule(
     b: *std.Build,
     target: std.Build.ResolvedTarget,
-    optimize: std.builtin.OptimizeMode,
+    optimize: std.lang.Optimize,
     graph: Graph,
     source: []const u8,
 ) *std.Build.Module {
@@ -313,6 +313,65 @@ fn facadeModule(
     });
     mod.addImport(module_name, graph.module);
     return mod;
+}
+fn runConsumer(
+    b: *std.Build,
+    target: std.Build.ResolvedTarget,
+    optimize: std.lang.Optimize,
+    linkage: std.lang.LinkMode,
+    runtime_loaded: bool,
+) *std.Build.Step.Run {
+    const triple = target.query.zigTriple(b.allocator) catch @panic("OOM");
+    defer b.allocator.free(triple);
+    const cpu = target.query.serializeCpuAlloc(b.allocator) catch @panic("OOM");
+    defer b.allocator.free(cpu);
+
+    const run = b.addSystemCommand(&.{ b.graph.zig_exe, "build" });
+    run.setName("consumer package");
+    // Keep relative cache and Zig library environment paths rooted at the caller's cwd.
+    run.addArg("--build-file");
+    run.addFileArg2(b.path("consumer/build.zig"), .{ .make_absolute = true });
+    for ([_][]const u8{ "ZIG_GLOBAL_CACHE_DIR", "ZIG_LIB_DIR" }) |key| {
+        if (b.graph.environ_map.get(key)) |value| run.setEnvironmentVariable(key, value);
+    }
+    run.addArg(if (hostCanExecute(b, target)) "run" else "install");
+    run.addArg(b.fmt("-Dtarget={s}", .{triple}));
+    run.addArg(b.fmt("-Dcpu={s}", .{cpu}));
+    run.addArg(b.fmt("-Doptimize={s}", .{@tagName(optimize)}));
+    run.addArg(b.fmt("-Dlinkage={s}", .{@tagName(linkage)}));
+    run.addArg(b.fmt("-Druntime={}", .{runtime_loaded}));
+    run.addThirdPartyEnabledArgDarling(.{ .enabled = "-fdarling" });
+    run.addThirdPartyEnabledArgQemu(.{ .enabled = "-fqemu" });
+    run.addThirdPartyEnabledArgRosetta(.{ .enabled = "-frosetta" });
+    run.addThirdPartyEnabledArgWasmtime(.{ .enabled = "-fwasmtime" });
+    run.addThirdPartyEnabledArgWine(.{ .enabled = "-fwine" });
+    run.addArgs(&.{ "-j8", "--summary", "all", "--cache-dir" });
+    run.addDirectoryArg2(
+        .{ .relative = .{ .base = .local_cache, .sub_path = "consumer" } },
+        .{ .make_absolute = true },
+    );
+    run.addArg("--prefix");
+    run.addDirectoryArg2(
+        .{ .relative = .{ .base = .install_prefix } },
+        .{ .make_absolute = true },
+    );
+    run.addArg("--");
+    run.addPassthruArgs();
+    run.has_side_effects = true;
+    return run;
+}
+
+fn hostCanExecute(b: *std.Build, target: std.Build.ResolvedTarget) bool {
+    const host = &b.graph.host.result;
+    return switch (std.zig.system.getExternalExecutor(b.graph.io, &target.result, .{
+        .host_cpu_arch = host.cpu.arch,
+        .host_os_tag = host.os.tag,
+        .link_mode = .dynamic,
+        .link_libc = true,
+    })) {
+        .native => true,
+        else => false,
+    };
 }
 
 /// Read the Unicode data version used by upstream's misc test.
@@ -328,7 +387,13 @@ fn unicodeVersion(b: *std.Build) []const u8 {
 }
 
 fn readPackageFile(b: *std.Build, name: []const u8) []u8 {
-    return b.build_root.handle.readFileAlloc(b.graph.io, name, b.allocator, .limited(8 << 20)) catch |err| {
+    const file = b.root.openFile(b.graph.io, name, .{}) catch |err| {
+        std.debug.panic("cannot open {s}: {s}", .{ name, @errorName(err) });
+    };
+    defer file.close(b.graph.io);
+    var buffer: [4096]u8 = undefined;
+    var reader = file.reader(b.graph.io, &buffer);
+    return reader.interface.allocRemaining(b.allocator, .limited(8 << 20)) catch |err| {
         std.debug.panic("cannot read {s}: {s}", .{ name, @errorName(err) });
     };
 }
@@ -345,7 +410,7 @@ fn upstreamTestFlags(b: *std.Build, spec: UpstreamTest) []const []const u8 {
 fn addUpstreamTest(
     b: *std.Build,
     target: std.Build.ResolvedTarget,
-    optimize: std.builtin.OptimizeMode,
+    optimize: std.lang.Optimize,
     graph: Graph,
     spec: UpstreamTest,
     name: []const u8,
@@ -370,8 +435,8 @@ fn addTargetCheck(
     b: *std.Build,
     step: *std.Build.Step,
     query: std.Target.Query,
-    optimize: std.builtin.OptimizeMode,
-    linkage: std.builtin.LinkMode,
+    optimize: std.lang.Optimize,
+    linkage: std.lang.LinkMode,
 ) void {
     const cross_target = b.resolveTargetQuery(query);
     const triple = cross_target.result.zigTriple(b.allocator) catch @panic("unspellable target");
@@ -423,90 +488,6 @@ fn addTargetCheck(
     }
 }
 
-fn runConsumer(
-    b: *std.Build,
-    target: std.Build.ResolvedTarget,
-    optimize: std.builtin.OptimizeMode,
-    linkage: std.builtin.LinkMode,
-    runtime_loaded: bool,
-) *std.Build.Step.Run {
-    const query = target.query;
-    // addArg copies these values before the temporary buffers are freed.
-    const triple = query.zigTriple(b.allocator) catch @panic("OOM");
-    defer b.allocator.free(triple);
-    const cpu = query.serializeCpuAlloc(b.allocator) catch @panic("OOM");
-    defer b.allocator.free(cpu);
-
-    const run = b.addSystemCommand(&.{ b.graph.zig_exe, "build" });
-    run.setName("consumer package");
-    run.setCwd(b.path("consumer"));
-    run.addArg(if (hostCanExecute(b, target)) "run" else "install");
-    run.addArg(b.fmt("-Dtarget={s}", .{triple}));
-    // Forward CPU features separately from the target triple.
-    run.addArg(b.fmt("-Dcpu={s}", .{cpu}));
-    run.addArg(b.fmt("-Doptimize={s}", .{@tagName(optimize)}));
-    // Forward the selected linkage to the consumer.
-    run.addArg(b.fmt("-Dlinkage={s}", .{@tagName(linkage)}));
-    // Forward runtime dispatch to the nested consumer.
-    run.addArg(b.fmt("-Druntime={s}", .{if (runtime_loaded) "true" else "false"}));
-    // Forward the selected executor.
-    if (b.enable_darling) run.addArg("-fdarling");
-    if (b.enable_qemu) run.addArg("-fqemu");
-    if (b.enable_rosetta) run.addArg("-frosetta");
-    if (b.enable_wasmtime) run.addArg("-fwasmtime");
-    if (b.enable_wine) run.addArg("-fwine");
-    if (b.libc_runtimes_dir) |runtimes| run.addArgs(&.{ "--libc-runtimes", runtimes });
-    run.addArg("-j8");
-    run.addArg("--summary");
-    run.addArg("all");
-    // Give the nested build a separate local cache.
-    if (b.cache_root.path) |cache| {
-        run.addArg("--cache-dir");
-        run.addArg(b.fmt("{s}/consumer", .{cache}));
-    }
-    // Reuse the caller's global package cache.
-    if (b.graph.global_cache_root.path) |global_cache| {
-        run.addArg("--global-cache-dir");
-        run.addArg(global_cache);
-    }
-    // Forward an explicit install prefix as an absolute path.
-    const default_prefix = b.build_root.join(b.allocator, &.{"zig-out"}) catch @panic("OOM");
-    if (!std.mem.eql(u8, b.install_prefix, default_prefix)) {
-        const prefix = if (std.fs.path.isAbsolute(b.install_prefix))
-            b.install_prefix
-        else
-            b.pathJoin(&.{ b.graph.cache.cwd, b.install_prefix });
-        run.addArg("--prefix");
-        run.addArg(prefix);
-    }
-    // Forward caller arguments to the consumer.
-    if (b.args) |args| {
-        run.addArg("--");
-        run.addArgs(args);
-    }
-    run.has_side_effects = true;
-    return run;
-}
-
-fn hostCanExecute(b: *std.Build, target: std.Build.ResolvedTarget) bool {
-    const host = &b.graph.host.result;
-    const candidate = &target.result;
-    const options: std.zig.system.GetExternalExecutorOptions = .{
-        .allow_darling = b.enable_darling,
-        .allow_qemu = b.enable_qemu,
-        .allow_wasmtime = b.enable_wasmtime,
-        .allow_wine = b.enable_wine,
-        // QEMU needs runtime libraries for GNU libc.
-        .qemu_fixes_dl = candidate.isGnuLibC() and b.libc_runtimes_dir != null,
-        .link_libc = true,
-    };
-    return switch (std.zig.system.getExternalExecutor(b.graph.io, host, candidate, options)) {
-        .native, .rosetta => true,
-        .qemu => !candidate.isGnuLibC() or b.libc_runtimes_dir != null,
-        .wine, .wasmtime, .darling => true,
-        .bad_dl, .bad_os_or_cpu => false,
-    };
-}
 
 fn targetWasNamed(b: *const std.Build) bool {
     return b.user_input_options.contains("target");
@@ -544,18 +525,18 @@ const fixtures = [_][]const u8{
 
 fn installRecords(b: *std.Build) void {
     for (licence_records) |name| {
-        b.installFile(name, b.pathJoin(&.{ "share", "licenses", lib_name, std.fs.path.basename(name) }));
+        b.installFile(name, b.pathJoin(&.{ "share", "licenses", lib_name, std.Io.Dir.path.basename(name) }));
     }
 }
 
 fn installFixtures(b: *std.Build) void {
     for (fixtures) |name| {
-        b.installFile(name, b.pathJoin(&.{ "share", lib_name, "testdata", std.fs.path.basename(name) }));
+        b.installFile(name, b.pathJoin(&.{ "share", lib_name, "testdata", std.Io.Dir.path.basename(name) }));
     }
 }
 
 /// Render the upstream pkg-config template with relocatable paths and linkage-specific macros.
-fn installPkgConfig(b: *std.Build, linkage: std.builtin.LinkMode) void {
+fn installPkgConfig(b: *std.Build, linkage: std.lang.LinkMode) void {
     const output = b.addWriteFiles();
     const contents = renderPkgConfig(
         b,
@@ -570,7 +551,7 @@ fn installPkgConfig(b: *std.Build, linkage: std.builtin.LinkMode) void {
     ).step);
 }
 
-fn renderPkgConfig(b: *std.Build, template: []const u8, linkage: std.builtin.LinkMode) []const u8 {
+fn renderPkgConfig(b: *std.Build, template: []const u8, linkage: std.lang.LinkMode) []const u8 {
     // Keep the shared Cflags free of a trailing space.
     const cflags = switch (linkage) {
         .static => " -DUTF8PROC_STATIC",
@@ -596,7 +577,7 @@ pub fn build(b: *std.Build) void {
 
     // Static is the default; dynamic uses upstream's ABI version.
     const requested_linkage = b.option(
-        std.builtin.LinkMode,
+        std.lang.LinkMode,
         "linkage",
         "Deliver the native library as a static archive (the default, and " ++
             "exactly what this package produced before the option existed) or as " ++
@@ -664,7 +645,7 @@ pub fn build(b: *std.Build) void {
     const run_smoke = b.addRunArtifact(smoke);
     // Always execute the smoke program.
     run_smoke.has_side_effects = true;
-    if (b.args) |args| run_smoke.addArgs(args);
+    run_smoke.addPassthruArgs();
     b.step("smoke", "Run the smoke program").dependOn(&run_smoke.step);
 
     // Use tests.zig as the test root so Zig discovers its test blocks.
@@ -697,7 +678,7 @@ pub fn build(b: *std.Build) void {
     for (upstream_tests) |spec| {
         const program = addUpstreamTest(b, target, optimize, graph, spec, spec.name);
         const run = b.addRunArtifact(program);
-        for (spec.fixtures) |fixture| run.addFileArg(b.path(fixture));
+        for (spec.fixtures) |fixture| run.addFileArg2(b.path(fixture), .{});
         run.has_side_effects = true;
         upstream_step.dependOn(&run.step);
     }
@@ -717,7 +698,7 @@ pub fn build(b: *std.Build) void {
 
     b.step(
         "consumer",
-        "Build and run the independent dep.module(\"utf8proc\") consumer",
+        "Build the independent consumer package and run it for native targets",
     ).dependOn(&runConsumer(b, target, optimize, requested_linkage, runtime_loaded).step);
 
     // Print build configuration, not test results.

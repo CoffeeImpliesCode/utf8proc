@@ -19,9 +19,9 @@ The upstream C implementation, public header, generated data table, and test sou
 | `runtime/generate.zig` | Workspace-provided generator derives dispatch wrappers from translated declarations instead of handwritten signatures. |
 | `runtime/sync.c` | Workspace-provided platform locks, condition variables, and thread identities synchronize load attempts. |
 | `runtime/sync.h` | Declares the prefixed synchronization interface so SDK loader symbols do not collide. |
-| `consumer/build.zig` | Builds an independent dependent using only `dep.module("utf8proc")` to define the package-consumer route. |
-| `consumer/build.zig.zon` | Uses a local path dependency so the consumer package tests the source package directly. |
-| `consumer/src/main.zig` | Calls the facade without a separate artifact, header path, or linkage flag so module omissions are visible. |
+| `consumer/build.zig` | Builds a standalone executable through `dep.module("utf8proc")`; forwards linkage, runtime mode, and program arguments. |
+| `consumer/build.zig.zon` | Declares the consumer's identity and local `.path = ".."` dependency. |
+| `consumer/src/main.zig` | Checks independent facade expectations in linked and runtime-loaded builds. |
 
 `utf8proc.c` points to a copyright notice absent from `utf8proc_data.c`. `NOTICE.md` records the mismatch and leaves upstream bytes unchanged. `LICENSE.md` carries the compiled table's Unicode terms. `testdata/Unicode-License-V3.txt` accompanies the conformance data.
 
@@ -36,7 +36,8 @@ The upstream C implementation, public header, generated data table, and test sou
 
 ## Build graph
 
-- The root script extends upstream's one-source C build with the Zig facade, runtime dispatch, tests, smoke program, API exercise, and standalone consumer.
+- The root script extends upstream's one-source C build with the Zig facade, runtime dispatch, tests, smoke program, API exercise, target checks, upstream C tests, and a standalone consumer package.
+- On Zig 0.17, the nested consumer build uses `--build-file`, `ZIG_GLOBAL_CACHE_DIR`, and `ZIG_LIB_DIR`; it keeps the caller's cwd and uses a separate local cache.
 - The library build defines `UTF8PROC_STATIC` for static linkage and `UTF8PROC_EXPORTS` for the shared library. The translation header defines neither macro.
 - Runtime dispatch generation consumes actual translation output, so the function signatures stay derived from the translated header.
 - `zig/api_exercise.zig` is compiled by the default step and `check`. It runs from `test` or `exercise` and is not installed.
@@ -45,6 +46,7 @@ The upstream C implementation, public header, generated data table, and test sou
 - `check` compiles the declared target configurations and does not run code. An explicit `-Dtarget` checks only that target.
 - There is no system-library mode. Libraries before 2.12.0 lack `utf8proc_free`, and 2.12.0 changed declared types without changing widths.
 - `package.nix` wraps the Zig build and selects linkage. The flake exposes static and shared outputs with static as default. The devenv shell provides tools and keeps task outputs and caches outside the checkout.
+- The pinned Nixpkgs revision predates Zig 0.17.0; flake and devenv extend its Zig recipe with the 0.17.0 release metadata.
 
 ## Platform boundaries
 

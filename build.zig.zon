@@ -4,7 +4,7 @@
     .version = "2.12.0",
     // Stable fork identity.
     .fingerprint = 0xdcddf08d3f5ccfa0, // Fork identity.
-    .minimum_zig_version = "0.16.0",
+    .minimum_zig_version = "0.17.0",
 
     // No external dependencies.
     .dependencies = .{},
@@ -36,9 +36,7 @@
         "NEWS.md",
         "lump.md",
         "Doxyfile",
-        "consumer/build.zig",
-        "consumer/build.zig.zon",
-        "consumer/src/main.zig",
+        "consumer",
         "LICENSE.md",
         "UPSTREAM.md",
         "UPSTREAM.sha256",
