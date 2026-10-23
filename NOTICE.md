@@ -1,288 +1,43 @@
 # NOTICE
 
-This file is the per-file licence record for this package. It exists because a
-single label for this tree would be **wrong**, and the way it is wrong is worth
-stating precisely rather than smoothing over: there are three distinct upstream
-grants in play, one file carries no notice of its own at all, one file upstream
-*points at* for a notice it does not contain, and 29 of upstream's files carry
-no per-file licence header either. An auditor working file by file has to be
-told that, rather than left hunting for headers upstream never wrote.
+`LICENSE.md` retains upstream's two separate MIT/expat grants and its Unicode data grant. `testdata/Unicode-License-V3.txt` contains the current Unicode terms for the added data files.
 
-**Nothing in this package claims one licence for the whole tree.** "MIT" is the
-term for the library and for most of its material; it is not the term for
-everything here, and no summary line anywhere in this repository says it is.
+## Licence by path
 
-## The three upstream grants
+| Paths | Terms |
+|---|---|
+| Upstream library, headers, build files, tools, tests, and documentation, including `README.upstream.md` | The two MIT/expat grants in `LICENSE.md` |
+| `test/**` (19 files), `data/**` (4), `bench/**` (6) | The MIT/expat grants; these 29 files have no per-file notice |
+| `utf8proc_data.c` | Both MIT/expat grants and the separate Unicode data grant in `LICENSE.md` |
+| `testdata/NormalizationTest.txt`, `GraphemeBreakTest.txt`, `DerivedCoreProperties.txt`, `Lowercase.txt`, `Uppercase.txt` | Unicode License V3 in `testdata/Unicode-License-V3.txt`; each data file carries its notice |
+| Fork-authored paths listed below | MIT grant in `FORK-LICENSE.md` |
+| Fork additions to `build.zig`, `build.zig.zon`, and `.gitignore` | MIT; upstream bytes in those files remain under upstream's grants |
+| `runtime/loader.zig`, `runtime/generate.zig`, `runtime/sync.c`, `runtime/sync.h`, and `flake.lock` | Not fork-authored; this notice states no terms for them |
 
-`LICENSE.md` is upstream's single licence file — 93 lines, three sections, no
-`COPYING`, no per-file `LICENSE`, and **no SPDX identifier anywhere in the
-upstream tree** (swept; zero matches). The three sections are:
+The upstream C library, headers, tables, tests, tools, and build files are covered by the package-level MIT grants. The second MIT grant is a separate copyright, not a replacement for the first.
 
-### 1. The utf8proc grant — MIT / "expat"
+- `LICENSE.md`: `Copyright © 2014-2021 by Steven G. Johnson, Jiahao Chen, Tony Kelman, Jonas Fonseca, and other contributors listed in the git history.`
+- `LICENSE.md`: `Copyright (c) 2009, 2013 Public Software Group e. V., Berlin, Germany.`
+- `LICENSE.md`: `Copyright (c) 1991-2007 Unicode, Inc. All rights reserved. Distributed under the Terms of Use in http://www.unicode.org/copyright.html.`
 
-`LICENSE.md:1-28`. `LICENSE.md:10` reads, verbatim:
+`utf8proc_data.c` has no copyright or licence notice of its own. The reference in `utf8proc.c` to a notice in that file is dangling; its Unicode terms are recorded in `LICENSE.md`. The data file remains unmodified, and its grant text is shipped unchanged.
 
-```
-*Copyright © 2014-2021 by Steven G. Johnson, Jiahao Chen, Tony Kelman, Jonas Fonseca, and other contributors listed in the git history.*
-```
+The five Unicode data files are not upstream files and are not covered by upstream's grants. Their headers state:
 
-`README.upstream.md:23-28` states the same thing in prose: the package is under
-"expat" licence "plus certain Unicode data governed by the similarly permissive
-Unicode data license". This grant reaches the library, its header, its
-generated tables, its tests, its tooling and its build files.
+> © 2026 Unicode®, Inc.  
+> Unicode and the Unicode Logo are registered trademarks of Unicode, Inc. in the U.S. and other countries.  
+> For terms of use and license, see https://www.unicode.org/terms_of_use.html
 
-### 2. The original grant — MIT / "expat", a *different* copyright
+`testdata/Unicode-License-V3.txt` carries `Copyright © 1991-2026 Unicode, Inc.` Unicode License V3 and the older Unicode grant in `LICENSE.md` are different texts; the older grant covers `utf8proc_data.c`, and License V3 covers the five `testdata/` files. Unicode trademarks remain reserved and are not used as marks here.
 
-`LICENSE.md:30-50`. `LICENSE.md:32` reads, verbatim:
+## Fork-authored paths
 
-```
-*Copyright (c) 2009, 2013 Public Software Group e. V., Berlin, Germany*
-```
+The owner authorized MIT for the following fork-authored files. Copyright holder: `the utf8proc Zig SDK fork authors`; no upstream author is credited for fork work.
 
-This is a second copyright with its own grant, not a restatement of the first.
-It exists because the library was originally developed by Jan Behrens and the
-Public Software Group e. V., Berlin — `README.upstream.md:8-12` says so and links their
-former site. **Both grants must be kept, and neither substitutes for the
-other.** A redistribution that keeps only the first notice has dropped a
-copyright.
+- `zig/root.zig`, `zig/api_exercise.zig`, `zig/translate.h`, `tests.zig`, `smoke.zig`
+- `consumer/build.zig`, `consumer/build.zig.zon`, `consumer/src/main.zig`
+- `runtime/graph.zig`, `runtime/library.zig`
+- `README.md`, `README.zig.md`, `NOTICE.md`, `UPSTREAM.md`, `UPSTREAM.sha256`, `FORK-NOTES.md`, `CHANGELOG.md`, `FORK-LICENSE.md`
+- `package.nix`, `flake.nix`, `devenv.nix`, `devenv.yaml`, `.envrc`, `cross-test.profile.sh`
 
-### 3. The Unicode data grant — a different term, naming one file
-
-`LICENSE.md:52-93`. It applies to `utf8proc_data.c` **specifically**
-(`LICENSE.md:54-55`: "This software contains data (`utf8proc_data.c`) derived
-from processing the Unicode data files"). Its notice is
-`LICENSE.md:59-60`:
-
-```
-*Copyright (c) 1991-2007 Unicode, Inc. All rights reserved. Distributed
-under the Terms of Use in http://www.unicode.org/copyright.html.*
-```
-
-and it grants on **three** conditions (`LICENSE.md:66-74`): (a) the notice
-appears with all copies, (b) it appears in associated documentation, (c) there
-is clear notice in each modified Data File or in the Software as well as in the
-documentation that the data or software has been modified. `LICENSE.md:91-93`
-adds the trademark reservation.
-
-## The four per-file exceptions an auditor has to know about
-
-### Exception 1 — `utf8proc_data.c` has no notice of its own
-
-The compiled data table is 2 409 012 bytes and **its line 1 is
-`static const utf8proc_uint16_t utf8proc_sequences[] = {`**. There is no
-copyright line, no licence line, no SPDX tag, anywhere in the file. It is
-covered by the package-level MIT grant (grant 1) *and* it is the file the
-separate Unicode grant (grant 3) names. Record it as its own data-file item
-rather than merging it into "MIT".
-
-It is also one of the three files this fork compiles, so the exception is
-load-bearing, not cosmetic.
-
-### Exception 2 — upstream's pointer to that notice is **dangling**
-
-`utf8proc.c:25-33` says:
-
-```
-/*
- *  This library contains derived data from a modified version of the
- *  Unicode data files.
- *
- *  The original data files are available at
- *  https://www.unicode.org/Public/UNIDATA/
- *
- *  Please notice the copyright statement in the file "utf8proc_data.c".
- */
-```
-
-**There is no copyright statement in `utf8proc_data.c`.** Line 32 tells a reader
-to look in a file that has none. The Unicode terms for the data table exist
-**only** in `LICENSE.md` §3, and nowhere else in the tree.
-
-This is recorded, not repaired. Adding a notice to `utf8proc_data.c` would
-change 2.4 MB of upstream-generated bytes whose identity to upstream's committed
-content is proved in [`UPSTREAM.md`](UPSTREAM.md) — twice over, by a SHA-256
-match against the driver's 53-blob archive map and by a git blob SHA-1 match
-against upstream's tree listing. It would be an upstream source edit with no
-observed failure to justify it, and no owner authorisation covers it.
-**This file therefore does not repeat upstream's claim that the data file
-carries a notice.**
-
-### Exception 3 — 29 upstream files carry no per-file notice
-
-A sweep of `test/`, `data/` and `bench/` for `Copyright`, `Permission is hereby`,
-`MIT` or `SPDX` returns **nothing**: 19 files under `test/` (15 `.c` files, plus
-`test/tests.h`, `test/ossfuzz.sh`, `test/install_uninstall.sh` and
-`test/app/CMakeLists.txt`), 4 under `data/` and 6 under `bench/` — 29 in all.
-They fall under grant 1 alone, and that is the correct reading: the MIT grant
-covers the package, not each file individually. But the per-file record has to
-name them as carrying no notice of their own, so that an auditor does not read
-their silence as a missing file.
-
-### Exception 4 — the fixtures in `testdata/` are a **third** Unicode term
-
-The five conformance files this fork fetched from the Unicode Consortium are not
-utf8proc upstream material and no upstream grant reaches them. They are Unicode,
-Inc. data files under the **current** Unicode Terms of Use, and each carries its
-own notice in its own lines 3-5:
-
-```
-# © 2026 Unicode®, Inc.
-# Unicode and the Unicode Logo are registered trademarks of Unicode, Inc. in the U.S. and other countries.
-# For terms of use and license, see https://www.unicode.org/terms_of_use.html
-```
-
-`testdata/Unicode-License-V3.txt` carries the current licence text itself, so a
-recipient has the governing terms in the same package as the data. This fork does
-not restate those terms, does not paraphrase them, does not relicense them, and
-does not strip the notice they carry. The files travel unmodified.
-
-**The two Unicode texts in this package are not the same text, and this package
-does not reconcile them.** `LICENSE.md` §3 quotes the 1991-2007 three-condition
-grant and cites the retired `copyright.html` URL — the same retired URL at
-`README.upstream.md:27`. Unicode's current published licence for its Data Files is
-**Unicode License V3**, whose single grant offers the notice in all copies
-**or** in associated documentation, with no separate modification condition.
-Grant 3 governs `utf8proc_data.c`; Unicode License V3 governs the `testdata/`
-files. Both are shipped as written. Neither is edited to match the other.
-
-## This fork's own files are MIT, on the owner's authorization
-
-`build.zig`, `build.zig.zon`, `zig/translate.h`, the Zig facade and every other
-file under `zig/`, `tests.zig`, `smoke.zig`, `zig/api_exercise.zig`,
-`consumer/build.zig`, `consumer/build.zig.zon`, `consumer/src/main.zig`,
-`cross-test.profile.sh`, `.github/workflows/verify.yml`, this fork's own half of
-the runtime route — `runtime/graph.zig` and `runtime/library.zig` — this file and
-its companions — `UPSTREAM.md`, `UPSTREAM.sha256`, `README.zig.md`,
-`FORK-NOTES.md`, `CHANGELOG.md`, `README.md`, `FORK-LICENSE.md` — and this wave's
-standalone delivery files `package.nix`, `flake.nix`, `devenv.nix`,
-`devenv.yaml` and `.envrc` are **fork-authored**, and the owner of this working
-copy has authorized **MIT** for exactly that set: SPDX identifier `MIT`, chosen to
-match the primary upstream term recorded in grant 1 above. The full grant text,
-the exact scope and the basis are in [`FORK-LICENSE.md`](FORK-LICENSE.md); this
-file keeps the inventory role it has always had, and the grant adds no entry to it.
-
-`runtime/loader.zig`, `runtime/generate.zig`, `runtime/sync.c`,
-`runtime/sync.h` and `flake.lock` are the **driver's**, not this fork's. The
-first four are the reusable loader core, authored and distributed by the driver
-and shared across SDKs rather than written here; `flake.lock` is the lock for
-the one input `flake.nix:15` declares, written into this tree on 2026-10-04
-after the delivery files beside it. The MIT grant above covers this fork's own
-half of the route and this fork's own delivery, and asserts nothing about those
-five files' terms. There is no `devenv.lock` in this tree — `devenv.yaml:19-22`
-records that the lock is the driver's to write and that this role writes none —
-so no entry for one appears anywhere in this file.
-
-That grant does **not** reach:
-
-* any upstream byte, including the upstream bytes still inside `build.zig`,
-  `build.zig.zon` and `.gitignore`, and `README.upstream.md`, which is upstream's
-  file under upstream's digest;
-* `utf8proc_data.c`, which stays under grant 3, because `LICENSE.md` names it and
-  this fork cannot substitute a different term for it;
-* the five `.txt` files in `testdata/`, which stay under **Unicode License V3**.
-  Placing them there and recording their digests is this fork's decision and
-  carries no separate grant.
-
-The rule is unchanged: a file's licence comes from that file's own terms. Three
-upstream grants and two Unicode texts remain three grants and two texts, and the
-holder the fork grant names is the collective `the utf8proc Zig SDK fork
-authors` — no individual identity invented, no upstream author credited with fork
-work.
-
-## What this fork changed in upstream's files
-
-**No upstream C source, header, data table, test source, benchmark, generator or
-licence text is modified. One upstream documentation file is:** `README.md` is now
-the fork's own README, and upstream's bytes are preserved beside it, byte for
-byte, as `README.upstream.md` (SHA-256 `105b8cf218f3e1493e14067b4c73b857c1c978c652d98fcfc070371b29c54576`,
-which is the same digest `README.md` carried before this wave, so the provenance of
-upstream's text is a rename and not a re-measurement). `UPSTREAM.sha256` pins 50
-upstream files plus the 6 Unicode files; `sha256sum -c UPSTREAM.sha256` is the
-check. **That check has not been run by this package's authors and no result is
-claimed for it** — the driver runs it.
-
-That claim is measured, not asserted. The driver recorded a 53-blob per-file
-SHA-256 map for `git archive --format=tar 79cdd5ab40c79afa559f689ffc13b76812dee1ac`
-in `local://foundation-project-matrix-source-pins.json`, and **all 53 of this
-fork's upstream digests match it exactly, with 0 mismatches and matching byte
-sizes**; every blob is `"kind": "regular"`, so there is no link standing in for
-a file. For the three compiled files there is a second, independent anchor as
-well: the git blob SHA-1 computed over each file on disk equals the blob id
-observed in upstream's own tree listing, for all three. Both comparisons are set
-out in [`UPSTREAM.md`](UPSTREAM.md).
-
-### Four upstream files are edited: three build-only, one documentation-only
-
-| File | Change | Upstream SHA-256 as imported |
-|---|---|---|
-| `build.zig` | Upstream's 26 lines are extended in place. Upstream compiles `utf8proc.c` with `-DUTF8PROC_STATIC`, sets `link_libc = true` and installs the header; the fork keeps all of that and adds the `test`, `smoke`, `exercise`, `check`, `upstream-test` and `consumer` steps, plus `-Dlinkage=static|dynamic` (defaulting to upstream's own static linkage) and `-Druntime=true` (default `false`, orthogonal to linkage). The tree is **not** relocated and upstream is **not** duplicated elsewhere, because Zig permits one `build.zig` per package and upstream ships its own. | `e5c3f68a41ed7462e230afd0300491547eb1c3d2872af30a6553a251bb451433` (649 bytes) |
-| `build.zig.zon` | Upstream's `.name = .utf8proc` and `.version = "2.12.0"` are preserved verbatim, and upstream's own `.fingerprint = 0xdcddf08dbb8954c4` is read out of `git show 79cdd5ab…:build.zig.zon`. Upstream ships a 7-entry `.paths` — `build.zig`, `build.zig.zon`, `utf8proc.h`, `utf8proc.c`, `utf8proc_data.c`, `README.md`, `LICENSE.md` — and all seven are still listed here by name; the fork adds the corpora, upstream's suite and tooling, the records and the consumer package, and this wave adds `README.upstream.md`, `FORK-LICENSE.md`, `package.nix`, `flake.nix`, `devenv.nix`, `devenv.yaml` and `.envrc`. `FORK-LICENSE.md` is load-bearing rather than tidiness: `build.zig` installs it, so a fetched copy without it fails the install step. `flake.lock` is listed beside them, and it is the **driver's** file rather than a fork-authored addition: it was written into this tree on 2026-10-04, after the delivery files above, and it resolves the single input `flake.nix:15` declares, so this file and the grant in `FORK-LICENSE.md` both leave its terms alone. `runtime/` **is** listed too, and the reason it once was not — that no `runtime/graph.zig` existed — stopped being true when CHANGELOG entry 50 (2026-10-04) cut `-Druntime=true` over to that file, so the directory travels whole and a dependent that asks for the route reaches the driver's loader core beside this fork's graph and descriptor. No `devenv.lock` is listed, because none exists and a `.paths` entry with no file behind it is itself a closure failure. The `.fingerprint` here is `0xdcddf08d3f5ccfa0`: a different value, because this manifest is not upstream's manifest, and it must never be copied between the two. | `84c041c2725795a793433686cca6f212295e4411400114555c4a189e40843b3d` (275 bytes) |
-| `.gitignore` | Upstream's 44 lines are kept **verbatim**. Ten root-anchored entries are appended: four Zig (`/.zig-cache/`, `/zig-out/`, `/consumer/.zig-cache/`, `/consumer/zig-out/`) and six for this wave's tooling (`/result`, `/result-*`, `/.devenv/`, `/.devenv.flake.nix`, `/.devenv.flakes/`, `/devenv.local.nix`). No upstream ignore pattern is removed or widened, and no negation rule is needed because no fork file ends in `.new`. `flake.lock` and `devenv.lock` are deliberately **not** ignored: they are real inputs belonging to the driver. | `40274c6530f9c9fdd977561fc35cc0196b59b14256b538906ed544dc4f2534cf` (490 bytes) |
-| `README.md` | Documentation-only. Upstream's 143-line README is **replaced in place** by the fork's own README, and upstream's exact bytes are kept unchanged as `README.upstream.md`. Nothing upstream wrote is edited, moved into the fork README, or paraphrased: every quotation of upstream's prose in this repository now cites `README.upstream.md:<line>`, and that file is what `UPSTREAM.sha256` pins. `README.upstream.md` is upstream's material under upstream's grant; the new `README.md` is fork-authored under the MIT grant in [`FORK-LICENSE.md`](FORK-LICENSE.md). | `105b8cf218f3e1493e14067b4c73b857c1c978c652d98fcfc070371b29c54576` (5839 bytes, 143 lines — measured on the preserved copy) |
-
-Those four SHA-256 values are digests of the **pristine upstream bytes**,
-measured before the first edit, and they are the reason the four files are
-**absent** from `UPSTREAM.sha256`: once edited they are no longer byte-identical
-to upstream, and a digest in that file claiming otherwise would be false. The
-`build.zig` edits carry **no licence consequence** — they are the build
-definition of a package already licensed by grants 1 and 2, and the upstream
-terms still apply to every byte of them that is upstream's.
-
-**Everything else this fork adds is new, in new files**, listed in the
-"fork-authored" section above. The six `testdata/` files are new to this package
-but are **not fork-authored** — they are Unicode's, and they are hashed as such.
-`README.upstream.md` is the one exception that is both new as a *file* and not
-fork-authored as *bytes*: it is upstream's README at the digest above, kept whole.
-
-## Third-party obligations, and what this fork does about them
-
-MIT / "expat" requires the copyright notice and the licence text to be included
-in all copies and substantial portions. Both grants' notices and both texts are
-shipped verbatim in `LICENSE.md`, which is in `.paths`. Neither grant requires a
-statement of changes, a `NOTICE` file, or a patent grant — MIT has no explicit
-patent clause and no termination-on-litigation term, so there is nothing to
-reproduce here and this file does not invent a patent section it would have had
-to fabricate if the licence were Apache-2.0.
-
-The fork's own MIT grant adds one obligation of its own, recorded in
-[`FORK-LICENSE.md`](FORK-LICENSE.md): that file's copyright and permission notice
-must travel with every copy of the fork-authored material. This wave installs
-`FORK-LICENSE.md`, this file, `UPSTREAM.md` and `LICENSE.md` together under
-`share/licenses/utf8proc/` in the Nix output for exactly that reason, so an
-installed prefix carries every grant that applies to what it installed.
-
-The Unicode data grant's condition (c) — clear notice of modification — is
-satisfied for `utf8proc_data.c` by the fact that **this fork does not modify
-it**, and by `LICENSE.md` §3 travelling with it unmodified. This fork generates
-no modified Data File.
-
-The Unicode Terms of Use additionally reserve the Unicode word mark and logo.
-`testdata/NormalizationTest.txt:3` and `testdata/GraphemeBreakTest.txt:3` carry
-`© 2026 Unicode®, Inc.` in their own headers and those lines are kept as they
-arrived. Nothing in this package uses the Unicode name or logo as its own mark.
-
-The Unicode Terms of Use also state that all Unicode Data Files and Unicode
-Software are subject to Unicode License V3 "unless otherwise indicated by
-specific restriction, permission, or license identified at the point of release
-or in such software, data file, or other documentation." `LICENSE.md` §3 is such
-an indication for `utf8proc_data.c`, at the point of release. That is why both
-texts ship rather than one being chosen.
-
-## Cryptographic suitability
-
-**Not applicable, and stated rather than left open.** utf8proc is a text
-transformation library: it normalizes, decomposes, composes, case-folds,
-segments grapheme clusters, and reports Unicode character properties and East
-Asian width. It ships no cipher, no hash, no key derivation, no random number
-generator and no other security-relevant primitive. The one thing that could be
-mistaken for security-relevant material — the 2.4 MB of checked-in Unicode
-character tables — is public Unicode character data carried under the terms
-above, and the `utf8proc_utf8class[256]` table at `utf8proc.c:56` is UTF-8 lead
-byte classification.
-
-That said, and stated because it is a real property of the library rather than a
-licence matter: **do not use `utf8proc_codepoint_valid` or this library's
-iteration as a security boundary.** Input validation is one thing this library
-does and is not another — see [`README.zig.md`](README.zig.md) for what
-`UTF8PROC_CHARBOUND` emits, why it is not valid UTF-8, and which preconditions
-the Zig layer owns rather than inherits.
+`README.upstream.md` is upstream's README, preserved unchanged under upstream's terms. `README.md` is fork-authored. The fork grant covers only the fork-authored portions of `build.zig`, `build.zig.zon`, and `.gitignore`; it does not cover upstream bytes in those files, `utf8proc_data.c`, or the five Unicode data files. See `FORK-LICENSE.md` for the grant scope and exclusions.

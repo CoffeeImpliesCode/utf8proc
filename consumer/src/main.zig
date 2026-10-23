@@ -1,35 +1,18 @@
-//! Consumer of the published `utf8proc` package.
-//!
-//! This package depends on the SDK through `dep.module("utf8proc")` and nothing
-//! else: no `dep.artifact(...)` link, no system library, no header include. Its
-//! whole point is to prove that the published module is self-contained, so every
-//! check below is the same contract `smoke.zig` exercises, written against
-//! independent expected values.
-//!
-//!
-//! The same source builds against a linked package and against a
-//! runtime-loaded one. `utf8proc.runtime_loaded` is a comptime constant, so the
-//! difference is one branch and no duplicated program: in the runtime-loaded
-//! build the provider is named on the command line (`--provider <path>`) or in
-//! `UTF8PROC_TEST_PROVIDER`, loaded once before anything else is called, and
-//! the same answers below follow from it.
-//!
-//! It runs as `zig build run` from this directory.
+//! External consumer of the published `utf8proc` package.
+//! Uses only `dep.module("utf8proc")` and independent expectations.
+//! Builds linked or runtime-loaded; runtime mode requires an explicit provider before API calls.
 
 const std = @import("std");
 const utf8proc = @import("utf8proc");
 
-/// A shared object exporting the entry points of `utf8proc.h`, named by the
-/// environment in a runtime-loading build.
+/// Environment variable used when runtime mode has no `--provider` argument.
 const provider_variable = "UTF8PROC_TEST_PROVIDER";
 
-/// A runtime-loading build has no provider until one is named.
+/// Error returned when runtime mode has no provider request.
 const ConfigurationError = error{NoProviderConfigured};
 
 pub fn main(init: std.process.Init) !void {
-    // In a runtime-loading build every call below goes through a table that
-    // this one call fills, so the load has to come before the first of them.
-    // In a linked build the branch is not analyzed at all.
+    // Load before any API call; runtime dispatch needs a ready table.
     if (comptime utf8proc.runtime_loaded) {
         try utf8proc.load(.{ .path = try providerRequest(init) });
     }
@@ -71,8 +54,7 @@ fn checkNormalization(w: *std.Io.Writer) !void {
         return error.ConsumerDecompositionMismatch;
     }
 
-    // The sizing query is the same call with no destination, so a consumer can
-    // size a reusable buffer instead of allocating per string.
+    // The count-only call returns the required output size without a destination.
     const needed = try utf8proc.decomposeCount("\u{FB01}", .{ .stable = true, .compose = true, .compat = true });
     if (needed != 2) return error.ConsumerDecompositionMismatch;
 
@@ -160,9 +142,9 @@ fn checkReencode(w: *std.Io.Writer) !void {
     try w.print("  reencode: {d} bytes, terminator byte {d}, short workspace refused\n", .{ written, roomy[written] });
 }
 
-/// The five `utf8proc_NF*` shortcuts and the one failure they can report.
+/// Checks convenience wrappers and their error behavior.
 fn checkShortcuts(w: *std.Io.Writer) !void {
-    // NFC of "e" + U+0301 is U+00E9, and NFKD of the U+FB01 ligature is "fi".
+    // NFC composes `e` plus U+0301; NFKD maps U+FB01 to `fi`.
     const composed = try utf8proc.nfc("e\u{0301}");
     defer composed.deinit(); // utf8proc_free; not allocator.free
     if (!std.mem.eql(u8, "\u{00E9}", composed.bytes())) return error.ConsumerShortcutMismatch;
@@ -171,9 +153,7 @@ fn checkShortcuts(w: *std.Io.Writer) !void {
     defer ligature.deinit();
     if (!std.mem.eql(u8, "fi", ligature.bytes())) return error.ConsumerShortcutMismatch;
 
-    // Upstream discards the status these five return, so a malformed input and a
-    // failed allocation are one answer, and the status-returning route is the
-    // only one that can say which it was.
+    // These shortcuts collapse malformed-input and allocation errors; the status API distinguishes them.
     if (utf8proc.nfc("\xFF")) |_| {
         return error.ConsumerShortcutShouldHaveFailed;
     } else |err| switch (err) {
@@ -192,12 +172,8 @@ fn checkShortcuts(w: *std.Io.Writer) !void {
     });
 }
 
-/// The provider this run should load, from `--provider <path>` or from
-/// `UTF8PROC_TEST_PROVIDER`.
-///
-/// Both are explicit. Nothing here looks in a default location, and a build
-/// that was not told which file to load says so rather than loading something
-/// else.
+/// Selects the provider from `--provider <path>` or `UTF8PROC_TEST_PROVIDER`.
+/// Returns the selected value or `NoProviderConfigured`; there is no default path.
 fn providerRequest(init: std.process.Init) ConfigurationError![]const u8 {
     const args = init.minimal.args.toSlice(init.arena.allocator()) catch
         return noProvider();
@@ -212,8 +188,7 @@ fn providerRequest(init: std.process.Init) ConfigurationError![]const u8 {
         return noProvider();
 }
 
-/// Say which variable is missing. An error name on its own would send the next
-/// person into the loader instead of to the command line.
+/// Prints explicit provider instructions and returns `NoProviderConfigured`.
 fn noProvider() ConfigurationError {
     std.debug.print(
         "consumer: this is a runtime-loading build. Pass --provider <path>, or " ++

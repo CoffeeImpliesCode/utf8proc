@@ -1,54 +1,17 @@
-//! Public tests for the utf8proc Zig facade.
-//!
-//! Three groups:
-//!
-//! * **Conformance corpora, consumed whole.** `NormalizationTest.txt` (20171
-//!   rows, the full 20-check matrix from the file's own CONFORMANCE section),
-//!   `GraphemeBreakTest.txt` (853 rows, checked two ways: the stateful UAX #29
-//!   walk and the `UTF8PROC_CHARBOUND` marker form) and the `Lowercase.txt` /
-//!   `Uppercase.txt` ranges walked over the entire codepoint space. These
-//!   Unicode corpora are embedded in full; no runner needs a source-tree path.
-//! * **Regressions** ported from upstream's `test/misc.c`,
-//!   `test/graphemetest.c` and `test/maxdecomposition.c`, each one a real
-//!   behaviour upstream has broken before: issues 102, 128, 144, 288, 317, 356,
-//!   julia#37680 and the GB9c Indic conjunct cases.
-//! * **Owned contracts**: the `reencode` spare byte, NULLTERM and CHARBOUND
-//!   refusals, disjoint decomposition buffers, and native error conditions.
-//!
-//! Upstream's informational comparison against the system `wcwidth`
-//! (`test/charwidth.c:73-86`) is deliberately not ported; its own comment calls
-//! those mismatches errors of out-of-date system tables. The oracle-free
-//! invariants from that file, and its four pinned codepoints, are ported.
-//!
-//! The same source builds against a linked package and against a
-//! runtime-loaded one. `utf8proc.runtime_loaded` is a comptime constant, so the
-//! difference is one line per test and no duplicated suite: in the
-//! runtime-loaded build each test names the provider from
-//! `UTF8PROC_TEST_PROVIDER` and loads it once, and a run without that variable
-//! stops with its name instead of quietly testing nothing.
+//! Tests the utf8proc Zig facade.
+//! Replays the 20,171 normalization and 853 grapheme rows in embedded Unicode 18.0.0 data.
+//! Covers full-space, regression, ownership and error contracts; stale system `wcwidth` is not an oracle.
+//! Runtime tests require `UTF8PROC_TEST_PROVIDER`; linked builds need no provider.
 
 const std = @import("std");
 const testing = std.testing;
 const utf8proc = @import("utf8proc");
 
-/// A shared object exporting the thirty-one entry points of `utf8proc.h` and
-/// the `utf8proc_utf8class` object, named by the environment in a
-/// runtime-loading build.
+/// Explicit provider path for runtime tests.
 const provider_variable = "UTF8PROC_TEST_PROVIDER";
 
-/// Make the native library usable, once, before a test calls the facade.
-///
-/// In a linked build the facade is usable already and this is a no-op at
-/// comptime. In a runtime-loading build every call into the module goes through
-/// a table that `load` fills, so this is where the one explicit load happens.
-/// It is safe to call from every test: the contract makes the same request
-/// idempotent, and the loader keeps the handle to the end of the process.
-///
-/// A build that was not told which file to load stops here with the variable's
-/// name, rather than reporting a test failure that says nothing about the
-/// reason. A suite that quietly stopped testing because a variable was unset
-/// would report success for nothing, and one that failed anonymously would send
-/// the next person looking in the loader instead of at the command line.
+/// No-op for linked builds; runtime tests load the explicit provider once.
+/// Missing or failed loads stop the suite rather than allowing untested success.
 fn nativeReady() void {
     if (comptime !utf8proc.runtime_loaded) return;
     if (utf8proc.loadedSource() != null) return;
@@ -79,15 +42,11 @@ fn missingProvider() noreturn {
     );
 }
 
-// ---------------------------------------------------------------------------
-// Fixture access and parsing
-// ---------------------------------------------------------------------------
-
 fn readFixture(comptime name: []const u8) []const u8 {
     return @embedFile("testdata/" ++ name);
 }
 
-/// Iterator over the lines of a fixture, with any trailing CR removed.
+/// Reads fixture lines and strips a trailing CR.
 const Lines = struct {
     data: []const u8,
     cursor: usize = 0,
@@ -136,13 +95,8 @@ fn parseSpan(text: []const u8) !Span {
     return .{ .start = single, .end = single };
 }
 
-/// Every `start..end ; Property` data row of one derived-property section.
-///
-/// `DerivedCoreProperties.txt` opens a section with `# Derived Property: <name>`
-/// and closes it with `# Total code points: n` (SOURCE-CONFIRMED at lines 1495
-/// and 2210, 2214 and 2896 of the 18.0.0 file). The extracted `Lowercase.txt` /
-/// `Uppercase.txt` hold the same rows with the count line reduced to a bare
-/// `# Total code points:`, so one parser serves both shapes.
+/// Parses `start..end ; Property` rows for the named section.
+/// Accepts source-section headers and extracted lowercase/uppercase files.
 fn parseSpans(gpa: std.mem.Allocator, data: []const u8, property_name: []const u8, derived_file: bool) ![]Span {
     var list: std.ArrayList(Span) = .empty;
     errdefer list.deinit(gpa);
@@ -166,22 +120,13 @@ fn parseSpans(gpa: std.mem.Allocator, data: []const u8, property_name: []const u
     return list.toOwnedSlice(gpa);
 }
 
-// ---------------------------------------------------------------------------
-// Scratch space for one normalization run
-// ---------------------------------------------------------------------------
-
-/// Codepoints out of `decompose`, bytes out of `reencode`. Sized from the
-/// corpus, not guessed: the longest line of `NormalizationTest.txt` is 476
-/// bytes (SOURCE-CONFIRMED), so one column holds at most about 94 codepoints,
-/// and `decomposeChar` returns at most 4 per codepoint (asserted over the whole
-/// space below). `ScratchTooSmall` is therefore a loud test failure, never a
-/// silent truncation.
+/// Scratch buffers sized for the full fixtures: 1024 codepoints and 4097 aligned bytes.
+/// Too-small buffers fail with `ScratchTooSmall`; they never truncate.
 const Scratch = struct {
     cps: [1024]i32 = undefined,
     work: [4097]u8 align(4) = undefined,
 
-    /// Decompose then re-encode: the caller-buffer equivalent of upstream's
-    /// `utf8proc_map` (`utf8proc.c:755-757`), allocating on neither side.
+    /// Normalizes through caller buffers without allocating.
     fn normalize(str: []const u8, options: utf8proc.Options, scratch: *Scratch) ![]const u8 {
         const count = switch (try utf8proc.decompose(str, scratch.cps[0..], options)) {
             .written => |n| n,
@@ -193,7 +138,7 @@ const Scratch = struct {
     }
 };
 
-/// Encodes codepoints as UTF-8 with upstream's own encoder.
+/// Encodes codepoints as UTF-8 with upstream's encoder.
 fn encodeAll(out: []u8, codepoints: []const i32) ![]const u8 {
     var written: usize = 0;
     for (codepoints) |codepoint| {
@@ -210,7 +155,7 @@ fn encodeAll(out: []u8, codepoints: []const i32) ![]const u8 {
     return out[0..written];
 }
 
-/// Decodes a UTF-8 literal into codepoints.
+/// Decodes UTF-8 text into codepoints.
 fn decodeAll(text: []const u8, out: []i32) !usize {
     var count: usize = 0;
     var rest = text;
@@ -224,16 +169,11 @@ fn decodeAll(text: []const u8, out: []i32) !usize {
     return count;
 }
 
-/// The four normalization forms, with the flags upstream's own shortcuts use
-/// (`utf8proc.c:818-846`, minus `UTF8PROC_NULLTERM`, which this facade refuses).
+/// Four normalization option sets matching upstream's shortcut flags.
 const nfc = utf8proc.Options{ .stable = true, .compose = true };
 const nfd = utf8proc.Options{ .stable = true, .decompose = true };
 const nfkc = utf8proc.Options{ .stable = true, .compose = true, .compat = true };
 const nfkd = utf8proc.Options{ .stable = true, .decompose = true, .compat = true };
-
-// ---------------------------------------------------------------------------
-// Owned contracts
-// ---------------------------------------------------------------------------
 
 test "UTF8PROC_NULLTERM is refused on every slice entry point" {
     nativeReady();
@@ -253,33 +193,29 @@ test "UTF8PROC_NULLTERM is refused on every slice entry point" {
 
 test "error mapping is checked against upstream's own return values" {
     nativeReady();
-    // A lone surrogate in UTF-8. Upstream rejects it inside `utf8proc_iterate`
-    // (`utf8proc.c:151-152`), and that return value is what the facade routes.
+    // Upstream rejects surrogate UTF-8 even though `encodeChar` can produce it.
     var codepoint: i32 = 0;
     const status = utf8proc.c.utf8proc_iterate("\xED\xA0\x80", 3, &codepoint);
     try testing.expectEqual(@as(utf8proc.Status, utf8proc.c.UTF8PROC_ERROR_INVALIDUTF8), status);
     try testing.expectEqual(@as(i32, -1), codepoint);
     try testing.expectError(error.InvalidUtf8, utf8proc.decode("\xED\xA0\x80"));
 
-    // `0xFF` is the CHARBOUND marker byte and is not valid UTF-8
-    // (`utf8proc.c:204-209`), so such output cannot be fed back in.
+    // CHARBOUND's `0xFF` marker is not valid UTF-8.
     try testing.expectError(error.InvalidUtf8, utf8proc.decode("\xFF"));
 
-    // `compose | decompose` is upstream's own INVALIDOPTS (`utf8proc.c:547-548`).
+    // `compose | decompose` is invalid upstream.
     var scratch = Scratch{};
     try testing.expectError(
         error.InvalidOptions,
         Scratch.normalize("a", .{ .compose = true, .decompose = true }, &scratch),
     );
-    // `stripmark` without `compose` or `decompose` is the other one
-    // (`utf8proc.c:549-551`).
+    // `stripmark` requires `compose` or `decompose`.
     try testing.expectError(
         error.InvalidOptions,
         Scratch.normalize("a", .{ .stripmark = true }, &scratch),
     );
 
-    // REJECTNA on an unassigned codepoint (`utf8proc.c:468-470`), and an
-    // out-of-range one unconditionally (`utf8proc.c:449`).
+    // `rejectna` rejects unassigned codepoints; out-of-range values always fail.
     var destination: [8]i32 = undefined;
     try testing.expectError(
         error.NotAssigned,
@@ -293,9 +229,7 @@ test "error mapping is checked against upstream's own return values" {
 
 test "reencode refuses a workspace that is one byte short" {
     nativeReady();
-    // Upstream requires one spare byte past the codepoints and checks nothing
-    // (`utf8proc.c:750-751`); `4 * length` bytes is exactly one short, which is
-    // every plain `i32` buffer including a stack array.
+    // `reencode` requires `4 * length + 1`; upstream does not check capacity.
     const codepoints = [_]i32{ 'e', 0x0301, 'x', 'y' };
     var tight: [4 * 4]u8 align(4) = undefined;
     @memcpy(tight[0..], std.mem.sliceAsBytes(codepoints[0..]));
@@ -307,7 +241,7 @@ test "reencode refuses a workspace that is one byte short" {
     );
     try testing.expectEqualSlices(u8, &before, &tight);
 
-    // One more byte is exactly what it takes.
+    // The extra byte holds the trailing NUL.
     var roomy: [4 * 4 + 1]u8 align(4) = undefined;
     @memcpy(roomy[0 .. 4 * 4], std.mem.sliceAsBytes(codepoints[0..]));
     const written = try utf8proc.reencode(roomy[0..], codepoints.len, .{ .compose = true });
@@ -315,13 +249,13 @@ test "reencode refuses a workspace that is one byte short" {
     try testing.expectEqualStrings("\u{00E9}xy", roomy[0..written]);
     try testing.expectEqual(@as(u8, 0), roomy[written]);
 
-    // Zero codepoints still needs room for the terminator.
+    // Even empty output needs one byte for NUL.
     var single: [1]u8 align(4) = undefined;
     try testing.expectEqual(@as(usize, 0), try utf8proc.reencode(single[0..], 0, .{}));
     try testing.expectEqual(@as(u8, 0), single[0]);
     try testing.expectError(error.WorkspaceTooSmall, utf8proc.reencode(single[0..], 1, .{}));
 
-    // `4 * length` must not overflow before it is compared.
+    // The workspace-size calculation must detect overflow.
     var tiny: [4]u8 align(4) = undefined;
     try testing.expectError(
         error.WorkspaceTooSmall,
@@ -333,8 +267,7 @@ test "decompose reports the required size instead of a truncated result" {
     nativeReady();
     var scratch = Scratch{};
 
-    // A Hangul syllable decomposes to three jamo; a two-element destination
-    // must say so rather than pretend it wrote two.
+    // Hangul syllables may decompose to three jamo; a two-slot buffer reports that size.
     const result = try utf8proc.decompose("\u{AC01}", scratch.cps[0..2], .{ .decompose = true });
     try testing.expectEqual(@as(usize, 3), result.needs_more);
     try testing.expectEqual(@as(usize, 3), try utf8proc.decomposeCount("\u{AC01}", .{ .decompose = true }));
@@ -345,7 +278,7 @@ test "decompose reports the required size instead of a truncated result" {
     try testing.expectEqual(@as(i32, 0x1161), scratch.cps[1]);
     try testing.expectEqual(@as(i32, 0x11A8), scratch.cps[2]);
 
-    // An empty destination is upstream's own sizing query, not a write.
+    // Empty `dst` requests capacity without writing.
     const empty = try utf8proc.decompose("\u{AC01}", scratch.cps[0..0], .{ .decompose = true });
     try testing.expectEqual(@as(usize, 3), empty.needs_more);
 
@@ -371,14 +304,12 @@ test "decode and encode agree on every valid codepoint" {
         try testing.expectEqual(@as(u21, @intCast(codepoint)), decoded.codepoint);
         checked += 1;
     }
-    // Every scalar value in [0, 0x110000) except the 2048 surrogates.
+    // All Unicode scalar values, excluding the 2048 surrogates.
     try testing.expectEqual(@as(usize, 0x110000 - 0x800), checked);
 }
 test "surrogates encode to bytes decode rejects" {
     nativeReady();
-    // The documented upstream asymmetry (`utf8proc.c:187-188`): the encoder
-    // keeps encoding D800..DFFF so the API does not change, the decoder
-    // rejects them.
+    // Upstream encodes surrogate values, but UTF-8 decoding rejects them.
     var buffer: [4]u8 = undefined;
     var codepoint: i32 = 0xD800;
     while (codepoint < 0xE000) : (codepoint += 1) {
@@ -393,7 +324,7 @@ test "surrogates encode to bytes decode rejects" {
         try testing.expectError(error.InvalidUtf8, utf8proc.decode(buffer[0..length]));
     }
 
-    // Outside [0, 0x110000) the encoder reports rejection instead of writing.
+    // Values outside `[0, 0x110000)` are rejected without writing.
     switch (utf8proc.encodeChar(-1, &buffer)) {
         .rejected => {},
         .bytes => return error.CodepointShouldHaveBeenRejected,
@@ -404,14 +335,9 @@ test "surrogates encode to bytes decode rejects" {
     }
 }
 
-// ---------------------------------------------------------------------------
-// Whole-space invariants
-// ---------------------------------------------------------------------------
-
 test "decomposeChar never returns more than four codepoints" {
     nativeReady();
-    // The whole-space invariant of upstream `test/maxdecomposition.c`, which
-    // exists to keep the documented default size at `utf8proc.h:539-540` true.
+    // Upstream's max-decomposition invariant keeps the four-codepoint limit valid.
     var destination: [16]i32 = undefined;
     var largest: usize = 0;
     var codepoint: i32 = 0;
@@ -421,8 +347,7 @@ test "decomposeChar never returns more than four codepoints" {
             .needs_more => |n| n,
         };
         largest = @max(largest, count);
-        // The same call with no output room must report the same required size,
-        // never a clamped one.
+        // A zero-capacity probe must report the same required size, not a clamped count.
         const probing = try utf8proc.decomposeChar(codepoint, destination[0..0], .{ .decompose = true }, null);
         try testing.expectEqual(count, switch (probing) {
             .written => |n| n,
@@ -434,10 +359,7 @@ test "decomposeChar never returns more than four codepoints" {
 
 test "character width invariants hold over the whole codepoint space" {
     nativeReady();
-    // Oracle-free invariants from upstream `test/charwidth.c:25-71`. The
-    // `wcwidth` comparison from that file is not ported: upstream calls its own
-    // results informational because system tables lag the UCD
-    // (`test/charwidth.c:76-79`).
+    // Check Unicode width invariants; system `wcwidth` may use stale tables.
     const lu = utf8proc.c.UTF8PROC_CATEGORY_LU;
     const lo = utf8proc.c.UTF8PROC_CATEGORY_LO;
     const mn = utf8proc.c.UTF8PROC_CATEGORY_MN;
@@ -454,34 +376,30 @@ test "character width invariants hold over the whole codepoint space" {
         const cat = utf8proc.category(codepoint);
         const width = utf8proc.charWidth(codepoint);
 
-        // Marks are zero width (`test/charwidth.c:29-32`).
+        // Combining marks have zero width.
         if (cat == mn or cat == me) try testing.expectEqual(@as(i32, 0), width);
 
-        // Nothing letter-, number- or symbol-like is zero width
-        // (`test/charwidth.c:33-38`).
+        // Letters, numbers and symbols are never zero-width.
         if (width == 0) {
             try testing.expect(!((cat >= lu and cat <= lo) or
                 (cat >= nd and cat <= sc) or
                 (cat >= so and cat <= zs)));
         }
 
-        // Unassigned and private-use codepoints are width 1
-        // (`test/charwidth.c:54-56`).
+        // Unassigned and private-use codepoints have width one.
         if (cat == cn or cat == co) try testing.expectEqual(@as(i32, 1), width);
 
-        // Ambiguous width is never also double width (`test/charwidth.c:58-60`).
+        // Ambiguous-width characters are not double-width.
         if (utf8proc.charWidthAmbiguous(codepoint)) try testing.expect(width < 2);
 
-        // Non-printing categories have no width. `my_isprint` from
-        // `test/charwidth.c:10-15`, rebuilt on `utf8proc_category`, which reads
-        // the same field the C test reaches through `utf8proc_get_property`.
+        // Non-printing categories are derived from the general-category fields.
         const printish = (cat >= lu and cat <= zs) or
             codepoint == 0x0601 or codepoint == 0x0602 or codepoint == 0x0603 or
             codepoint == 0x06DD or codepoint == 0x00AD or cat == cn or cat == co;
         if (!printish) try testing.expectEqual(@as(i32, 0), width);
     }
 
-    // The four codepoints `test/charwidth.c:65-71` pins.
+    // Four codepoints are pinned by upstream's width test.
     try testing.expectEqual(@as(i32, 1), utf8proc.charWidth(0x00AD));
     try testing.expect(utf8proc.charWidthAmbiguous(0x00AD));
     try testing.expectEqual(@as(i32, 1), utf8proc.charWidth(0xE000));
@@ -489,23 +407,18 @@ test "character width invariants hold over the whole codepoint space" {
     try testing.expect(utf8proc.charWidthAmbiguous(0x00A1));
     try testing.expect(!utf8proc.charWidthAmbiguous(0x00A2));
 
-    // ASCII is never ambiguous (`test/charwidth.c:46-48`).
+    // ASCII is never ambiguous-width.
     var ascii: i32 = 0;
     while (ascii < 128) : (ascii += 1) {
         try testing.expect(!utf8proc.charWidthAmbiguous(ascii));
     }
 }
 
-// ---------------------------------------------------------------------------
-// Upstream regressions
-// ---------------------------------------------------------------------------
-
 test "regression: canonical ordering, casefold and STRIPNA (issues 128 and 102)" {
     nativeReady();
     var scratch = Scratch{};
 
-    // Issue 128: "r" + U+0307 + U+0323. NFC composes the first pair; NFD
-    // reorders by combining class (U+0323 is 220, U+0307 is 230).
+    // Issue 128: canonical ordering moves U+0323 before U+0307; NFC composes them.
     try testing.expectEqualStrings(
         "\u{1E5B}\u{0307}",
         try Scratch.normalize("r\u{0307}\u{0323}", nfc, &scratch),
@@ -515,8 +428,7 @@ test "regression: canonical ordering, casefold and STRIPNA (issues 128 and 102)"
         try Scratch.normalize("r\u{0307}\u{0323}", nfd, &scratch),
     );
 
-    // Issue 102: IGNORE drops the soft hyphen, STRIPNA drops the unassigned
-    // U+2065, and without STRIPNA U+2065 survives the whole pipeline.
+    // Issue 102: `ignore` drops soft hyphen; `stripna` removes U+2065, which otherwise survives.
     const input = "X\u{2065}E\u{0300}\u{00AD}\u{1D2C}";
     const casefold = utf8proc.Options{
         .stable = true,
@@ -536,13 +448,12 @@ test "regression: Hangul jamo composition (issue 317)" {
     nativeReady();
     var scratch = Scratch{};
 
-    // U+C8E0 followed by U+11A7 (the T jamo base itself) must not compose.
+    // The trailing-jamo base itself must not compose.
     try testing.expectEqualStrings("\u{C8E0}\u{11A7}", try Scratch.normalize("\u{C8E0}\u{11A7}", nfc, &scratch));
-    // Nor must U+11C3, which is one past the last trailing jamo.
+    // One past the last trailing jamo must not compose.
     try testing.expectEqualStrings("\u{C8E0}\u{11C3}", try Scratch.normalize("\u{C8E0}\u{11C3}", nfc, &scratch));
 
-    // Every trailing jamo from TBASE+1 to TBASE+TCOUNT-1 does compose, which is
-    // the loop `test/misc.c:40-44` runs.
+    // Every valid trailing jamo composes, as in upstream's regression test.
     var trailing: i32 = 0x11A8;
     while (trailing < 0x11C3) : (trailing += 1) {
         var input: [8]u8 = undefined;
@@ -558,7 +469,7 @@ test "regression: Hangul jamo composition (issue 317)" {
         );
     }
 
-    // The algorithmic Hangul decomposition itself: LV and LVT syllables.
+    // LV and LVT Hangul syllables decompose algorithmically.
     try testing.expectEqualStrings(
         "\u{1100}\u{1161}",
         try Scratch.normalize("\u{AC00}", nfd, &scratch),
@@ -571,26 +482,21 @@ test "regression: Hangul jamo composition (issue 317)" {
 
 test "regression: uninterpretable codepoints survive normalizeUtf32 (issue 288)" {
     nativeReady();
-    // Baseline: composition still happens.
     var compose = [_]i32{ 0x0041, 0x0301 };
     try testing.expectEqual(@as(usize, 1), try utf8proc.normalizeUtf32(compose[0..], .{ .compose = true }));
     try testing.expectEqual(@as(i32, 0x00C1), compose[0]);
 
-    // An out-of-range codepoint is preserved and blocks composition across it:
-    // reading a property for it would index `utf8proc_stage1table` out of bounds
-    // (`utf8proc.c:233-240`).
+    // Out-of-range values pass through and block composition; property lookup would be out of bounds.
     var out_of_range = [_]i32{ 0x0041, 0x110000, 0x0301 };
     try testing.expectEqual(@as(usize, 3), try utf8proc.normalizeUtf32(out_of_range[0..], .{ .compose = true }));
     try testing.expectEqualSlices(i32, &.{ 0x0041, 0x110000, 0x0301 }, out_of_range[0..]);
 
-    // Same for the grapheme-break sentinel `utf8proc_decompose_char` writes.
+    // The decomposition grapheme-break sentinel behaves the same way.
     var sentinel = [_]i32{ 0x0041, -1, 0x0301 };
     try testing.expectEqual(@as(usize, 3), try utf8proc.normalizeUtf32(sentinel[0..], .{ .compose = true }));
     try testing.expectEqualSlices(i32, &.{ 0x0041, -1, 0x0301 }, sentinel[0..]);
 
-    // Through `reencode` the out-of-range value is dropped, because upstream's
-    // encoder returns 0 for it (`utf8proc.c:200`), but composition still does
-    // not happen across it: the A and the acute stay separate.
+    // Re-encoding drops the invalid value but preserves the blocked composition.
     var workspace: [4 * 3 + 1]u8 align(4) = undefined;
     @memcpy(workspace[0 .. 4 * 3], std.mem.sliceAsBytes(out_of_range[0..]));
     const written = try utf8proc.reencode(workspace[0..], 3, .{ .compose = true });
@@ -603,7 +509,7 @@ test "regression: CHARBOUND keeps its markers next to COMPOSE and DECOMPOSE (iss
     const compose = utf8proc.Options{ .charbound = true, .compose = true };
     const decompose = utf8proc.Options{ .charbound = true, .decompose = true };
 
-    // "e" + U+0301 + "xy". NFC gives U+00E9; NFD is the identity here.
+    // NFC composes `e` + acute; NFD leaves the sequence unchanged.
     const composed = try Scratch.normalize("e\u{0301}xy", compose, &scratch);
     try testing.expectEqual(@as(usize, 7), composed.len);
     try testing.expectEqualStrings("\xFF\u{00E9}\xFFx\xFFy", composed);
@@ -623,28 +529,26 @@ test "regression: emoji ZWJ, regional indicators and GB9c" {
     nativeReady();
     const ClusterCase = struct {
         text: []const u8,
-        /// Cluster ends, as "a break occurs before index i".
+        /// Break occurs before index `i`.
         ends: []const usize,
     };
 
     const cases = [_]ClusterCase{
-        // Two Swedish flags back to back: GB12/GB13 pair the regional
-        // indicators, so the break is at index 2, not at every index
-        // (julia#37680).
+        // GB12/GB13 pair regional indicators in twos (issue julia#37680).
         .{ .text = "\u{1F1F8}\u{1F1EA}\u{1F1F8}\u{1F1EA}", .ends = &.{ 2, 4 } },
         // GB11: Extended_Pictographic Extend* ZWJ x Extended_Pictographic.
         .{ .text = "\u{1F926}\u{1F3FC}\u{200D}\u{2642}\u{FE0F}", .ends = &.{5} },
         .{ .text = "\u{1F468}\u{1F3FB}\u{200D}\u{1F91D}\u{200D}\u{1F468}\u{1F3FD}", .ends = &.{7} },
-        // GB9c: linker + extend* must not break before a consonant.
+        // GB9c prevents a break after the linker sequence.
         .{ .text = "\u{0915}\u{0300}\u{094D}\u{0300}\u{0924}", .ends = &.{5} },
         .{ .text = "\u{0915}\u{0300}\u{094D}\u{0300}\u{094D}\u{0924}", .ends = &.{6} },
         .{ .text = "\u{0915}\u{0300}\u{0300}\u{0924}", .ends = &.{ 3, 4 } },
         .{ .text = "\u{0915}\u{0300}\u{094D}\u{0300}\u{0078}", .ends = &.{ 4, 5 } },
         // GB9c does not require a leading consonant.
         .{ .text = "\u{0300}\u{094D}\u{0300}\u{0924}", .ends = &.{4} },
-        // GB9 and GB9a: a combining mark or spacing mark never starts a cluster.
+        // GB9 and GB9a keep combining and spacing marks in the cluster.
         .{ .text = "\u{03B1}\u{0302}", .ends = &.{2} },
-        // GB3: CR x LF is one cluster; GB4/GB5 make a break before and after.
+        // GB3 keeps CRLF together; GB4/GB5 break around controls.
         .{ .text = "\r\n", .ends = &.{2} },
     };
 
@@ -664,18 +568,15 @@ test "regression: emoji ZWJ, regional indicators and GB9c" {
                 try testing.expect(!is_break);
             }
         }
-        // The end of input is a cluster end, not an adjacent-pair boundary.
+        // The final codepoint ends a cluster even without a following pair.
         if (next_end < case.ends.len and case.ends[next_end] == count) next_end += 1;
         try testing.expectEqual(case.ends.len, next_end);
     }
 
-    // Upstream's own pair assertions (`test/graphemetest.c:154-155`).
     try testing.expect(utf8proc.graphemeBreak(0x03B1, 0x03B2));
     try testing.expect(!utf8proc.graphemeBreak(0x03B1, 0x0302));
 
-    // The legacy stateless pair test is wrong exactly where history matters:
-    // it reports no break between two regional indicators even for the second
-    // pair, which GB12/GB13 says must be a break.
+    // The stateless helper lacks the regional-indicator history required by GB12/GB13.
     const flags = [_]i32{ 0x1F1E6, 0x1F1E8, 0x1F1EA, 0x1F1EC };
     try testing.expect(!utf8proc.graphemeBreak(flags[0], flags[1]));
     try testing.expect(!utf8proc.graphemeBreak(flags[2], flags[3]));
@@ -694,11 +595,11 @@ test "stateful segmentation, its reset, and firstGraphemeBreak" {
     try testing.expectEqual(@as(?usize, null), utf8proc.firstGraphemeBreak(flags[0..1]));
     try testing.expectEqual(@as(?usize, null), utf8proc.firstGraphemeBreak(flags[0..0]));
 
-    // A reset iterator is a fresh string (`utf8proc.h:658`).
+    // Reset starts a fresh string.
     iterator.reset();
     try testing.expect(!iterator.next(flags[0], flags[1]));
 
-    // A break resets the run for the next cluster: CRLFCRLF is two clusters.
+    // CRLF stays together; the next CR starts a new cluster.
     const crlf = [_]i32{ '\r', '\n', '\r', '\n' };
     var walk = utf8proc.GraphemeIterator{};
     try testing.expect(!walk.next(crlf[0], crlf[1]));
@@ -714,7 +615,7 @@ test "case mappings and categories agree with the extracted ranges" {
     try expectCaseFile(lowercase, "Lowercase", utf8proc.isLower, utf8proc.toLower);
     try expectCaseFile(uppercase, "Uppercase", utf8proc.isUpper, utf8proc.toUpper);
 
-    // Titlecase letters are uppercase but not `isupper` (`utf8proc.c:419`).
+    // Titlecase letters map uppercase but are neither `isUpper` nor `isLower`.
     try testing.expectEqual(@as(i32, 0x01C5), utf8proc.toTitle(0x01C4));
     try testing.expect(!utf8proc.isUpper(0x01C5));
     try testing.expect(!utf8proc.isLower(0x01C5));
@@ -724,15 +625,14 @@ test "case mappings and categories agree with the extracted ranges" {
     try testing.expectEqualStrings("Cn", utf8proc.categoryString(0x110000));
     try testing.expectEqualStrings("Co", utf8proc.categoryString(0xE000));
 
-    // Simple mappings are the identity where Unicode says there is none.
     try testing.expectEqual(@as(i32, 0x0301), utf8proc.toLower(0x0301));
     try testing.expectEqual(@as(i32, 0x0301), utf8proc.toUpper(0x0301));
     try testing.expectEqual(@as(i32, 0x1E9E), utf8proc.toUpper(0x00DF)); // capital sharp s
     try testing.expectEqual(@as(i32, 'i'), utf8proc.toLower(0x0130));
 }
 
-/// Mirrors upstream `test/iscase.c:33-49`: nothing outside a range, a mapping to
-/// itself inside one, ranges strictly ascending and disjoint.
+/// Checks sorted, disjoint spans and identity mappings inside each span.
+/// Codepoints outside the spans must not have the property.
 fn expectCaseFile(data: []const u8, name: []const u8, comptime is_case: fn (i32) bool, comptime that_case: fn (i32) i32) !void {
     const gpa = testing.allocator;
     const spans = try parseSpans(gpa, data, name, false);
@@ -754,16 +654,11 @@ fn expectCaseFile(data: []const u8, name: []const u8, comptime is_case: fn (i32)
     while (codepoint <= 0x110000) : (codepoint += 1) try testing.expect(!is_case(codepoint));
 }
 
-// ---------------------------------------------------------------------------
-// Conformance corpora
-// ---------------------------------------------------------------------------
-
 test "NormalizationTest.txt in full: the 20-check normalization matrix" {
     nativeReady();
     const data = readFixture("NormalizationTest.txt");
 
-    // Columns of the 18.0.0 file (its own header, lines 12-20):
-    //   source; NFC; NFD; NFKC; NFKD
+    // Columns are source, NFC, NFD, NFKC and NFKD.
     var encoded: [5][2048]u8 = undefined;
     var lengths: [5]usize = @splat(0);
     var parsed: [5][256]i32 = undefined;
@@ -792,9 +687,7 @@ test "NormalizationTest.txt in full: the 20-check normalization matrix" {
             encoded[3][0..lengths[3]], encoded[4][0..lengths[4]],
         };
 
-        // The CONFORMANCE section of the file itself: c1 == NFC(c0) == NFC(c1) ==
-        // NFC(c2); c3 == NFC(c3) == NFC(c4); c2 == NFD(c0..c2); c4 == NFD(c3) ==
-        // NFD(c4); c3 == NFKC(c0..c4); c4 == NFKD(c0..c4).
+        // Apply the file's twenty conformance equalities.
         try expectRow("NFC", nfc, &composed_inputs, encoded[1][0..lengths[1]], lines.line_number, &scratch, &checks);
         try expectRow("NFC", nfc, all_inputs[3..], encoded[3][0..lengths[3]], lines.line_number, &scratch, &checks);
         try expectRow("NFD", nfd, &composed_inputs, encoded[2][0..lengths[2]], lines.line_number, &scratch, &checks);
@@ -803,7 +696,7 @@ test "NormalizationTest.txt in full: the 20-check normalization matrix" {
         try expectRow("NFKD", nfkd, &all_inputs, encoded[4][0..lengths[4]], lines.line_number, &scratch, &checks);
     }
 
-    // 20171 data rows and twenty checks each: the whole corpus, not a sample.
+    // All 20,171 fixture rows have twenty checks: no sampled execution.
     try testing.expectEqual(@as(usize, 20171), rows);
     try testing.expectEqual(@as(usize, 20171 * 20), checks);
 }
@@ -873,11 +766,10 @@ test "GraphemeBreakTest.txt in full: stateful walk and CHARBOUND markers" {
         }
         if (count == 0) continue;
         rows += 1;
-        // Every row opens with a break, per the format's leading U+00F7.
+        // Every row starts with a boundary marker.
         try testing.expect(breaks[0]);
 
-        // (a) the stateful UAX #29 walk: one iterator, every adjacent pair, in
-        // order, which is what GB10/12/13 require (`utf8proc.h:656-658`).
+        // Stateful GB10/12/13 checks require every adjacent pair in order.
         var iterator = utf8proc.GraphemeIterator{};
         var index: usize = 1;
         while (index < count) : (index += 1) {
@@ -885,10 +777,7 @@ test "GraphemeBreakTest.txt in full: stateful walk and CHARBOUND markers" {
         }
         try testing.expectEqual(firstBreak(breaks[0..count]), utf8proc.firstGraphemeBreak(codepoints[0..count]));
 
-        // (b) the same segmentation as UTF8PROC_CHARBOUND marker bytes. Surrogate
-        // codepoints have no UTF-8 form, so those rows are checkable only
-        // through (a); upstream skips them for the same reason
-        // (`test/graphemetest.c:48-51`).
+        // Skip CHARBOUND for surrogate rows, which have no UTF-8 encoding.
         if (has_surrogate) {
             surrogate_rows += 1;
             continue;
@@ -925,14 +814,13 @@ test "GraphemeBreakTest.txt in full: stateful walk and CHARBOUND markers" {
             std.debug.print("GraphemeBreakTest.txt line {d}: CHARBOUND markers differ\n", .{lines.line_number});
             return error.GraphemeMismatch;
         }
-        // The markers really are 0xFF, which is why they cannot be decoded.
+        // CHARBOUND emits `0xFF`, which is invalid UTF-8.
         try testing.expect(std.mem.findScalar(u8, workspace[0..bytes], 0xFF) != null);
         try testing.expectError(error.InvalidUtf8, utf8proc.decode(workspace[0..bytes]));
     }
 
     try testing.expectEqual(@as(usize, 853), rows);
-    // Most rows carry no surrogate, so the CHARBOUND branch covers nearly all
-    // of the corpus; the count is reported so a change in the fixture is visible.
+    // Report CHARBOUND coverage and rows skipped because of surrogate codepoints.
     try testing.expect(utf8_rows > 0);
     std.debug.print("grapheme rows: {d}, checked through CHARBOUND: {d}, surrogate-only: {d}\n", .{ rows, utf8_rows, surrogate_rows });
 }
@@ -947,8 +835,7 @@ fn firstBreak(breaks: []const bool) ?usize {
 test "upstream-allocated map agrees with the caller-buffer path and frees with utf8proc_free" {
     nativeReady();
     var scratch = Scratch{};
-    // A NFKC_Casefold run through the malloc-owning entry point, whose memory
-    // comes from the C library and not from any Zig allocator.
+    // `map` owns memory allocated and freed by upstream.
     const casefold = utf8proc.Options{ .stable = true, .compose = true, .compat = true, .casefold = true, .ignore = true };
     const input = "X\u{2065}E\u{0300}\u{00AD}\u{1D2C}";
     const owned = try utf8proc.map(input, casefold);
@@ -959,7 +846,7 @@ test "upstream-allocated map agrees with the caller-buffer path and frees with u
         try Scratch.normalize(input, casefold, &scratch),
     );
 
-    // An empty input is a legitimate zero-length result, still NUL terminated.
+    // Empty input still returns a NUL-terminated zero-length result.
     const empty = try utf8proc.map("", .{});
     defer empty.deinit();
     try testing.expectEqual(@as(usize, 0), empty.len);
@@ -979,20 +866,18 @@ test "a custom mapping runs on every codepoint, in both caller-buffer and map pa
     const doubling: utf8proc.CustomFunc = &Doubler.call;
     const options = utf8proc.Options{ .decompose = true };
 
-    // The callback maps "a" to U+00C2, which NFD then decomposes into A and
-    // U+0302. U+0301 maps to U+0602 and does not decompose.
+    // Doubling maps `a` to U+00C2 and U+0301 to U+0602 before decomposition.
     var buffer: [16]i32 = undefined;
     const result = try utf8proc.decomposeCustom("a\u{0301}", buffer[0..], options, doubling, null);
     try testing.expectEqual(@as(usize, 3), result.written);
     try testing.expectEqualSlices(i32, &.{ 0x0041, 0x0302, 0x0602 }, buffer[0..3]);
 
-    // The same through `map`, which calls the callback on both of its passes
-    // (`utf8proc.c:787`, `utf8proc.c:791`).
+    // `mapCustom` invokes its callback during both sizing and fill passes.
     const mapped = try utf8proc.mapCustom("a\u{0301}", options, doubling, null);
     defer mapped.deinit();
     try testing.expectEqualStrings("A\u{0302}\u{0602}", mapped.bytes());
 
-    // Without a callback the same call is plain `decompose`.
+    // Without a callback, only the literal input is decomposed.
     const plain = try utf8proc.decompose("a\u{0301}", buffer[0..], options);
     try testing.expectEqual(@as(usize, 2), plain.written);
     try testing.expectEqual(@as(i32, 0x0061), buffer[0]);
@@ -1008,8 +893,7 @@ test "utf8Class agrees with the decoder's own lead-byte table" {
     try testing.expectEqual(@as(i8, 3), utf8proc.utf8Class(0xE2));
     try testing.expectEqual(@as(i8, 4), utf8proc.utf8Class(0xF0));
 
-    // The table says how many bytes a lead byte promises; the decoder decides
-    // whether they are actually there.
+    // A lead byte's class is only a length promise; the decoder validates bytes.
     const truncated = "\xE2\x82";
     try testing.expectEqual(@as(i8, 3), utf8proc.utf8Class(truncated[0]));
     try testing.expectError(error.InvalidUtf8, utf8proc.decode(truncated));
@@ -1018,10 +902,7 @@ test "utf8Class agrees with the decoder's own lead-byte table" {
 test "the NF* shortcuts answer Unicode's own values and refuse what they cannot" {
     nativeReady();
 
-    // The canonical pair: "e" + U+0301 is U+00E9 under NFC and unchanged under
-    // NFD. These are two rows of the corpus this file already replays in full,
-    // so the shortcuts are checked against the same oracle as the caller-buffer
-    // path rather than against a second opinion.
+    // NFC composes `e` + acute to U+00E9; NFD preserves the sequence.
     const composed = try utf8proc.nfc("e\u{0301}");
     defer composed.deinit();
     try testing.expectEqualStrings("\u{00E9}", composed.bytes());
@@ -1030,8 +911,7 @@ test "the NF* shortcuts answer Unicode's own values and refuse what they cannot"
     defer decomposed.deinit();
     try testing.expectEqualStrings("e\u{0301}", decomposed.bytes());
 
-    // U+FB01 has a compatibility decomposition and no canonical one, so the
-    // two compatibility forms split it and the two canonical forms keep it.
+    // Compatibility forms split U+FB01; canonical forms preserve it.
     const ligature = try utf8proc.nfkd("\u{FB01}");
     defer ligature.deinit();
     try testing.expectEqualStrings("fi", ligature.bytes());
@@ -1040,8 +920,7 @@ test "the NF* shortcuts answer Unicode's own values and refuse what they cannot"
     defer kept.deinit();
     try testing.expectEqualStrings("\u{FB01}", kept.bytes());
 
-    // U+212B is a compatibility singleton for U+00C5, and U+1E9E casefolds to
-    // "ss" rather than to any single codepoint.
+    // U+212B maps to U+00C5; U+1E9E case-folds to "ss".
     const singleton = try utf8proc.nfkc("\u{212B}");
     defer singleton.deinit();
     try testing.expectEqualStrings("\u{00C5}", singleton.bytes());
@@ -1050,17 +929,12 @@ test "the NF* shortcuts answer Unicode's own values and refuse what they cannot"
     defer sharp.deinit();
     try testing.expectEqualStrings("ss", sharp.bytes());
 
-    // The one failure these five can report. Upstream discards the status, so a
-    // malformed input and a failed allocation are the same NULL and this facade
-    // names that once rather than guessing which of upstream's five negative
-    // codes it was.
+    // Shortcuts collapse malformed-input and allocation failures to `NoResult`.
     try testing.expectError(error.NoResult, utf8proc.nfc("\xFF"));
-    // The same input through the status-returning route names the real cause,
-    // which is the reason `map` exists alongside the shortcuts.
+    // `map` preserves the specific UTF-8 error.
     try testing.expectError(error.InvalidUtf8, utf8proc.map("\xFF", .{}));
 
-    // An empty string is a valid NUL-terminated string and normalizes to
-    // itself: zero bytes, not a failure and not a NULL.
+    // Empty input is valid and remains empty.
     const empty = try utf8proc.nfc("");
     defer empty.deinit();
     try testing.expectEqual(@as(usize, 0), empty.bytes().len);

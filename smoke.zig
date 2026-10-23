@@ -1,25 +1,13 @@
-//! Smoke program for the utf8proc facade.
-//!
-//! Runs as `zig build smoke`. It is not a substitute for `tests.zig`: every
-//! assertion here has an independent expected value written in this file, and
-//! the conformance corpora live in the test root. What it adds is proof that a
-//! real executable links the archive, reaches the facade through the published
-//! module, and can do the work without a test harness.
-//!
-//! In a runtime-loading build the provider is named on the command line
-//! (`--provider <path>`) or in `UTF8PROC_TEST_PROVIDER`, loaded once before
-//! anything else is called, and the program says which of the two
-//! configurations it reached. Nothing is loaded by default and no other file
-//! is tried.
+//! Executable smoke test for the published facade in linked and runtime modes.
+//! It checks basic calls and provider loading; `tests.zig` covers the Unicode corpora.
 
 const std = @import("std");
 const utf8proc = @import("utf8proc");
 
-/// A shared object exporting the entry points of `utf8proc.h`, named by the
-/// environment in a runtime-loading build.
+/// Runtime provider environment variable.
 const provider_variable = "UTF8PROC_TEST_PROVIDER";
 
-/// A runtime-loading build has no provider until one is named.
+/// No provider configured for a runtime build.
 const ConfigurationError = error{NoProviderConfigured};
 
 pub fn main(init: std.process.Init) !void {
@@ -28,9 +16,7 @@ pub fn main(init: std.process.Init) !void {
     const w = &out.interface;
     defer out.flush() catch {};
 
-    // In a runtime-loading build every call below goes through a table that
-    // this one call fills, so the load has to come before the first of them.
-    // In a linked build the branch is not analyzed at all.
+    // Runtime calls need a loaded provider; linked builds omit this branch.
     if (comptime utf8proc.runtime_loaded) {
         try utf8proc.load(.{ .path = try providerRequest(init) });
     }
@@ -52,12 +38,11 @@ pub fn main(init: std.process.Init) !void {
     try out.flush();
 }
 
-/// Decompose into a caller buffer, normalize in place, re-encode in place.
-/// Nothing here allocates: the two buffers are on the stack.
+/// Checks caller-buffer normalization without allocating.
 fn checkNormalization(w: *std.Io.Writer) !void {
     var codepoints: [64]i32 = undefined;
 
-    // "e" + U+0301 is already composed, so NFD splits it and NFC puts it back.
+    // NFD splits `e` + acute; NFC composes it again.
     const decomposed = try utf8proc.decompose("e\u{0301}", codepoints[0..], .{
         .stable = true,
         .decompose = true,
@@ -93,13 +78,13 @@ fn checkNormalization(w: *std.Io.Writer) !void {
 }
 
 fn checkCase(w: *std.Io.Writer) !void {
-    // Capital sharp s folds to "ss"; a simple uppercase mapping is one
-    // codepoint to at most one codepoint.
+    // Full case-fold expands sharp S to "ss"; simple mappings do not.
     if (utf8proc.toUpper('a') != 'A') return error.SmokeCaseMismatch;
     if (utf8proc.toLower('A') != 'a') return error.SmokeCaseMismatch;
     if (utf8proc.toTitle(0x01C4) != 0x01C5) return error.SmokeCaseMismatch;
     if (!utf8proc.isLower('a') or !utf8proc.isUpper('A')) return error.SmokeCaseMismatch;
-    if (utf8proc.isUpper(0x01C5)) return error.SmokeCaseMismatch; // titlecase is not upper
+    // Titlecase letters are not `isUpper`.
+    if (utf8proc.isUpper(0x01C5)) return error.SmokeCaseMismatch;
 
     const folded = try utf8proc.map("\u{1E9E}", .{
         .stable = true,
@@ -115,8 +100,7 @@ fn checkCase(w: *std.Io.Writer) !void {
 }
 
 fn checkGraphemes(w: *std.Io.Writer) !void {
-    // "a" + combining acute is one cluster; a regional-indicator pair is one
-    // cluster even though the legacy stateless pair test cannot see that.
+    // Stateful segmentation keeps combining marks and regional-indicator pairs together.
     const combining = [_]i32{ 'a', 0x0301, 'b' };
     if (utf8proc.firstGraphemeBreak(combining[0..]) != 2) return error.SmokeGraphemeMismatch;
 
@@ -124,7 +108,7 @@ fn checkGraphemes(w: *std.Io.Writer) !void {
     if (utf8proc.firstGraphemeBreak(flags[0..]) != 2) return error.SmokeGraphemeMismatch;
     if (utf8proc.graphemeBreak(flags[0], flags[1])) return error.SmokeGraphemeMismatch;
 
-    // The same segmentation as 0xFF marker bytes, which are not valid UTF-8.
+    // CHARBOUND emits invalid-UTF-8 `0xFF` markers.
     const marked = try utf8proc.map("\u{1F1E6}\u{1F1E8}\u{1F1EA}\u{1F1EC}", .{ .charbound = true });
     defer marked.deinit();
     var markers: usize = 0;
@@ -152,10 +136,9 @@ fn checkProperties(w: *std.Io.Writer) !void {
     });
 }
 
-/// The five `utf8proc_NF*` shortcuts, each with the answer Unicode fixes, and
-/// the one failure upstream leaves indistinguishable.
+/// Checks all five normalization shortcuts and their collapsed error.
 fn checkShortcuts(w: *std.Io.Writer) !void {
-    // NFC of "e" + U+0301 is U+00E9, and NFKD of the U+FB01 ligature is "fi".
+    // NFC composes `e` + acute; NFKD splits U+FB01 to "fi".
     const composed = try utf8proc.nfc("e\u{0301}");
     defer composed.deinit(); // utf8proc_free; not allocator.free
     if (!std.mem.eql(u8, "\u{00E9}", composed.bytes())) return error.SmokeShortcutMismatch;
@@ -164,8 +147,7 @@ fn checkShortcuts(w: *std.Io.Writer) !void {
     defer ligature.deinit();
     if (!std.mem.eql(u8, "fi", ligature.bytes())) return error.SmokeShortcutMismatch;
 
-    // Upstream discards the status these five return, so a rejected input and a
-    // failed allocation are one answer and this facade reports it as one.
+    // Upstream's null result cannot distinguish malformed input from allocation failure.
     if (utf8proc.nfc("\xFF")) |_| {
         return error.SmokeShortcutShouldHaveFailed;
     } else |err| switch (err) {
@@ -178,12 +160,7 @@ fn checkShortcuts(w: *std.Io.Writer) !void {
     });
 }
 
-/// The provider this run should load, from `--provider <path>` or from
-/// `UTF8PROC_TEST_PROVIDER`.
-///
-/// Both are explicit. Nothing here looks in a default location, and a build
-/// that was not told which file to load says so rather than loading something
-/// else.
+/// Reads `--provider` or `UTF8PROC_TEST_PROVIDER`; no fallback is tried.
 fn providerRequest(init: std.process.Init) ConfigurationError![]const u8 {
     const args = init.minimal.args.toSlice(init.arena.allocator()) catch
         return noProvider();
@@ -198,8 +175,6 @@ fn providerRequest(init: std.process.Init) ConfigurationError![]const u8 {
         return noProvider();
 }
 
-/// Say which variable is missing. An error name on its own would send the next
-/// person into the loader instead of to the command line.
 fn noProvider() ConfigurationError {
     std.debug.print(
         "smoke: this is a runtime-loading build. Pass --provider <path>, or " ++
@@ -211,8 +186,7 @@ fn noProvider() ConfigurationError {
     return error.NoProviderConfigured;
 }
 
-/// The spare byte `utf8proc_reencode` needs is owned by the facade, so a plain
-/// `i32` array is not enough. This shows the bound being enforced.
+/// Confirms `reencode` requires a spare byte for the terminator.
 fn checkReencode(w: *std.Io.Writer) !void {
     const codepoints = [_]i32{ 0x1F1E6, 0x1F1E8 };
     var tight: [4 * 2]u8 align(4) = undefined;

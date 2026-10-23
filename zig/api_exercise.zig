@@ -1,27 +1,15 @@
 // SPDX-License-Identifier: MIT
 //
-//! Executable exercise of every supported utf8proc operation.
-//! `check` compiles this program for each target. `test` runs it alongside
-//! the independent Unicode conformance suite.
-//!
-//! Every public declaration in `zig/root.zig` is called from here, because
-//! `check` compiles this file for each of the six matrix targets and an
-//! uncalled declaration would otherwise never be instantiated.
-//!
-//! In a runtime-loading build nothing below can run until a provider is named,
-//! so the provider comes from `--provider <path>` or from `UTF8PROC_TEST_PROVIDER`
-//! and a build without one stops with an error instead of quietly reporting
-//! success.
+//! Executable probe that instantiates every public facade declaration.
+//! Runtime mode requires a provider from `--provider <path>` or `UTF8PROC_TEST_PROVIDER`.
 
 const std = @import("std");
 const utf8proc = @import("utf8proc");
 
-/// A shared object exporting the thirty-one entry points of `utf8proc.h` and
-/// the `utf8proc_utf8class` object, named by the environment in a
-/// runtime-loading build.
+/// Runtime provider environment variable.
 const provider_variable = "UTF8PROC_TEST_PROVIDER";
 
-/// A runtime-loading build has no provider until one is named.
+/// No provider configured for a runtime build.
 const ConfigurationError = error{NoProviderConfigured};
 
 fn expect(condition: bool) error{UnexpectedResult}!void {
@@ -57,8 +45,7 @@ pub fn main(init: std.process.Init) !void {
     try expect(utf8proc.encodeChar(0x00E9, &encoded).bytes == 2);
     try expect(std.mem.eql(u8, encoded[0..2], "\u{00E9}"));
     _ = utf8proc.property('A');
-    // The exported object is reached as an address, never copied: a lead byte
-    // of 0xF0 promises the four-byte form and 0x80 promises nothing at all.
+    // Lead-byte class gives the expected length, not UTF-8 validity.
     const lead_bytes = utf8proc.utf8ClassTable();
     try expect(lead_bytes[0xF0] == 4 and lead_bytes[0x80] == 0);
     try expect(utf8proc.charWidth('A') == 1 and utf8proc.charWidth(0x0301) == 0);
@@ -105,11 +92,7 @@ pub fn main(init: std.process.Init) !void {
     std.debug.print("utf8proc: all typed operations exercised\n", .{});
 }
 
-/// The five `utf8proc_NF*` entry points, each with the answer Unicode gives.
-///
-/// Every expected value below is one the standard fixes, and each is a row of
-/// the same `NormalizationTest.txt` corpus `tests.zig` replays in full, so this
-/// file does not carry a second opinion about what normalization means.
+/// Exercises all five NUL-terminated normalization shortcuts.
 fn exerciseShortcuts() !void {
     const composed = try utf8proc.nfc("e\u{0301}");
     defer composed.deinit();
@@ -119,8 +102,7 @@ fn exerciseShortcuts() !void {
     defer already.deinit();
     try expect(std.mem.eql(u8, already.bytes(), "e\u{0301}"));
 
-    // U+FB01 LATIN SMALL LIGATURE FI has the compatibility decomposition
-    // "fi" and no canonical one, so NFKD splits it and NFD leaves it alone.
+    // U+FB01 has only a compatibility decomposition, so NFKD splits it while NFD does not.
     const compat = try utf8proc.nfkd("\u{FB01}");
     defer compat.deinit();
     try expect(std.mem.eql(u8, compat.bytes(), "fi"));
@@ -128,31 +110,23 @@ fn exerciseShortcuts() !void {
     defer canonical.deinit();
     try expect(std.mem.eql(u8, canonical.bytes(), "\u{FB01}"));
 
-    // U+212B ANGSTROM SIGN is a compatibility singleton for U+00C5.
+    // U+212B compatibility singleton normalizes to U+00C5.
     const singleton = try utf8proc.nfkc("\u{212B}");
     defer singleton.deinit();
     try expect(std.mem.eql(u8, singleton.bytes(), "\u{00C5}"));
 
-    // U+1E9E LATIN CAPITAL LETTER SHARP S is canonically S + U+0307 and
-    // casefolds to "ss", which is the full mapping `map` applies and not the
-    // simple one `toLower` gives.
+    // U+1E9E case-folds to "ss"; simple lowercase does not.
     const sharp = try utf8proc.nfkcCasefold("\u{1E9E}");
     defer sharp.deinit();
     try expect(std.mem.eql(u8, sharp.bytes(), "ss"));
 
-    // An empty string is a valid NUL-terminated string and normalizes to
-    // itself rather than failing.
+    // Empty input is valid and remains empty.
     const empty = try utf8proc.nfc("");
     defer empty.deinit();
     try expect(empty.bytes().len == 0);
 }
 
-/// The provider this run should load, from `--provider <path>` or from
-/// `UTF8PROC_TEST_PROVIDER`.
-///
-/// Both are explicit. Nothing here looks in a default location, and a build
-/// that was not told which file to load says so rather than loading something
-/// else.
+/// Takes an explicit provider path from `--provider` or `UTF8PROC_TEST_PROVIDER`; never guesses.
 fn providerRequest(init: std.process.Init) ConfigurationError![]const u8 {
     const args = init.minimal.args.toSlice(init.arena.allocator()) catch
         return noProvider();
@@ -167,8 +141,6 @@ fn providerRequest(init: std.process.Init) ConfigurationError![]const u8 {
         return noProvider();
 }
 
-/// Say which variable is missing. An error name on its own would send the next
-/// person into the loader instead of to the command line.
 fn noProvider() ConfigurationError {
     std.debug.print(
         "api_exercise: this is a runtime-loading build. Pass --provider <path>, " ++

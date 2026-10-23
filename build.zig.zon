@@ -1,119 +1,30 @@
 .{
-    // The package id, and the name a dependent writes in its dependency map.
     .name = .utf8proc,
-    // Upstream's own API version, read out of utf8proc.h:72-76
-    // (UTF8PROC_VERSION_MAJOR 2, _MINOR 12, _PATCH 0), which is also what
-    // utf8proc.c:99-101 stringizes for utf8proc_version(). build.zig refuses
-    // to configure if this drifts away from the pin it holds, so a version
-    // bump is a decision and not a side effect.
-    //
-    // This is the API version, not the ABI version: upstream's soname is
-    // libutf8proc.so.3.3.0 (Makefile:25-27, MANIFEST), and utf8proc.h:56-68
-    // says the two answer different questions.
+    // Upstream API version.
     .version = "2.12.0",
-    // Persistent fork identity, distinct from upstream's pinned manifest
-    // fingerprint 0xdcddf08dbb8954c4. Builds validate its package-name component;
-    // they do not derive the complete value from the manifest's contents.
-    .fingerprint = 0xdcddf08d3f5ccfa0, // Changing this has security and trust implications.
+    // Stable fork identity.
+    .fingerprint = 0xdcddf08d3f5ccfa0, // Fork identity.
     .minimum_zig_version = "0.16.0",
 
-    // Nothing is fetched. The C library is this repository's own source, the
-    // facade imports only what is compiled here, and the Unicode corpora under
-    // testdata/ are committed files rather than a download at build or test
-    // time.
+    // No external dependencies.
     .dependencies = .{},
 
-    // The complete closure of what a fetched copy of this package needs: the
-    // native core it compiles, the public header it installs, the Unicode
-    // corpora its tests replay, upstream's own C suite, the fork's records, and
-    // the separate consumer package. `.zig-cache/`, `zig-out/`, `zig-pkg/` and
-    // `.git/` are absent by construction, and the ignore rules appended to the
-    // upstream `.gitignore` keep them out of the tree as well.
-    //
-    // A superset of upstream's own 7-entry `.paths` at the pinned tag
-    // (`build.zig`, `build.zig.zon`, `utf8proc.h`, `utf8proc.c`,
-    // `utf8proc_data.c`, `README.md`, `LICENSE.md`), all seven of which are
-    // present below. The three core entries were missing from an earlier
-    // revision of this file even though `build.zig` compiles and installs all
-    // three; `.github/workflows/verify.yml` now walks this repository and fails
-    // on any file that is neither listed here nor in that file's named
-    // exclusions, so the closure cannot silently shrink again.
-    //
-    // Provenance, licence and source-integrity records ship with the package.
+    // Files included in the fetched package.
     .paths = .{
-        // The native core: three files, one translation unit. `utf8proc.c` is
-        // the only compiled source and includes `utf8proc_data.c` at its line 53
-        // with a *quoted* include, so the two must stay adjacent in every copy a
-        // dependent fetches; `utf8proc.h` is the public header this package
-        // installs and translates. All three are upstream's bytes and all three
-        // are hashed in `UPSTREAM.sha256`.
         "utf8proc.c",
         "utf8proc.h",
         "utf8proc_data.c",
-        // Upstream's own two build files, extended in place by this fork, so
-        // they are listed before anything they reference.
         "build.zig",
         "build.zig.zon",
-        // The harness settings for the published 53-platform `cross-test`
-        // matrix. Fork-authored configuration, not documentation and not a
-        // build input: nothing in this package's `build.zig` reads it. It
-        // ships so a fetched copy is the whole package.
         "cross-test.profile.sh",
-        // zig/root.zig is the facade and zig/translate.h the one header
-        // `addTranslateC` reads; zig/api_exercise.zig is the explicit compile
-        // exercise that `check` builds for every matrix target. All three are
-        // fork-authored, and the whole directory travels together because a
-        // dependent reaches the facade through dep.module("utf8proc") and the
-        // translation is that module's `c` import.
         "zig",
-        // The runtime route. `runtime/graph.zig` is the build half this
-        // `build.zig` calls for `-Druntime=true` -- it is the one place
-        // `translate.createModule()` is replaced by the generated dispatch --
-        // and `runtime/library.zig` is this SDK's descriptor, which the
-        // dispatch binds through the `utf8proc_rt` synchronization prefix.
-        // The reusable loader core beside them is not listed separately: the
-        // whole directory travels together, because a dependent that fetches
-        // this package and asks for `-Druntime=true` needs the core, the graph
-        // and the descriptor or it has a route it cannot take.
         "runtime",
-        // The test root and the example. They live at the package root on
-        // purpose, beside the library sources the facade is written against,
-        // so `@import` reaches the corpus paths and the header by the same
-        // relative spelling the C sources do.
         "tests.zig",
         "smoke.zig",
-        // The independent Unicode 18.0.0 conformance corpora, with the licence
-        // that governs them beside them: NormalizationTest.txt,
-        // GraphemeBreakTest.txt, DerivedCoreProperties.txt (from which
-        // Lowercase.txt and Uppercase.txt are the verbatim upstream section
-        // extractions), and Unicode-License-V3.txt. They are committed rather
-        // than fetched, which is what keeps the "no build-time download" rule
-        // satisfied: upstream's own data/Makefile fetches them with curl
-        // (data/Makefile:44-48) and deletes them on `clean` (:58-60), so a
-        // tree that does not carry them cannot run upstream's own tests.
         "testdata",
-        // Upstream's C test programs, unmodified, which `upstream-test` builds
-        // and runs and which `check` compiles for all six targets.
         "test",
-        // Upstream's maintainer path for regenerating utf8proc_data.c:
-        // data_generator.jl, Project.toml, the Makefile this package reads
-        // UNICODE_VERSION from, and download.sh. No step in this package runs
-        // any of it -- it needs julia and the network -- but the tables in
-        // utf8proc_data.c have to be traceable to the data they came from, and
-        // the committed Unicode version is a recorded build input, not a
-        // constant this build invented.
         "data",
-        // Upstream's benchmark drivers. bench/icu.c links ICU4C and
-        // bench/unistring.c links libunistring, neither of which is in scope,
-        // so nothing in this package compiles them. They are upstream's
-        // material and are retained rather than deleted.
         "bench",
-        // Upstream's own build systems, kept so a re-sync has something to
-        // diff against and so the licence and provenance of the import stay
-        // visible. None of them is executed: build.zig cites Makefile for the
-        // source list, the C standard, the test programs and UNICODE_VERSION,
-        // and CMakeLists.txt for the header install rule and the shared
-        // library version.
         "Makefile",
         "CMakeLists.txt",
         "MANIFEST",
@@ -121,33 +32,13 @@
         "cmake",
         "libutf8proc.pc.in",
         "libutf8proc.pc.cmakein",
-        // Upstream's own documentation, kept whole.
         "README.md",
         "NEWS.md",
         "lump.md",
         "Doxyfile",
-        // The separate consumer package, proving the published module resolves
-        // from a package that did not write it, through a relative path rather
-        // than a fetch.
-        //
-        // Its three files, named one by one, and not the `consumer` directory.
-        // `zig build consumer` runs a second `zig build` whose working
-        // directory is `consumer/` (build.zig:684), and it passes
-        // `--cache-dir` only when the caller supplied one (build.zig:699-702),
-        // so a plain `zig build consumer` writes `consumer/.zig-cache` and
-        // `consumer/zig-out` into the tree. Listing the directory would carry
-        // both of those into every fetched copy and make the package hash
-        // change as a side effect of running the package's own gate. Naming
-        // the three files is what makes the allowlist true regardless of what
-        // a build has left behind, and it needs no `.exclude`: an exclusion
-        // list names paths that are not in the package, which is not the same
-        // statement as naming the paths that are.
         "consumer/build.zig",
         "consumer/build.zig.zon",
         "consumer/src/main.zig",
-        // Licence and provenance. LICENSE.md is upstream's file with its three
-        // sections: two MIT grants and the separate Unicode Terms of Use that
-        // govern utf8proc_data.c. The records beside it are this fork's.
         "LICENSE.md",
         "UPSTREAM.md",
         "UPSTREAM.sha256",
@@ -155,65 +46,14 @@
         "NOTICE.md",
         "CHANGELOG.md",
         "FORK-NOTES.md",
-        // `FORK-LICENSE.md` is not optional documentation here: `build.zig`'s
-        // install step copies it into `share/licenses/utf8proc/`, because MIT
-        // requires the copyright notice and the permission notice to travel
-        // with every copy of the fork-authored material the output contains --
-        // this build graph, `zig/translate.h`, `consumer/` and the generated
-        // `libutf8proc.pc` among them. A fetched copy without it would fail the
-        // install step outright, which is the right failure and not the reason
-        // to leave it out.
         "FORK-LICENSE.md",
-        // Upstream's own README, kept whole and separate from the fork's
-        // `README.md` above. It is upstream's bytes under upstream's grant, so
-        // it is listed here and not beside the fork's own records, and every
-        // quotation of upstream's prose cites this file rather than the fork's.
         "README.upstream.md",
-        // The standalone Nix and devenv delivery. `package.nix` is one
-        // source-only derivation over this tree's own `build.zig`, and it adds
-        // nothing to the install closure: the library, the header, `LICENSE.md`,
-        // `lib/pkgconfig/libutf8proc.pc`, the licence and data-term records and
-        // the Unicode fixtures are all written by the build graph, so a fetched
-        // copy that carries these files can build either variant and none of
-        // them has a second answer to the same question.
         "package.nix",
         "flake.nix",
-        // The driver's lock, written into this tree on 2026-10-04, after the
-        // delivery files it belongs to were authored. It is listed because it
-        // is here and is content, not residue: `.gitignore:82-85` keeps the
-        // locks out of the ignore rules on exactly that ground, and the
-        // `consumer` job in `.github/workflows/verify.yml` walks this
-        // repository against this list in both directions, so a file that is
-        // neither listed nor named in that step's CI list is a failure of the
-        // closure rather than something a reader has to notice.
-        //
-        // It is the resolved form of the one input `flake.nix:15` declares, not
-        // a second answer to it: `locked.rev` is the same
-        // c7def046b9a883d46974757852106483d741586f, and what the lock adds is
-        // the `narHash` for those bytes. A fetched copy therefore resolves that
-        // revision instead of choosing one for itself.
-        //
-        // It is the driver's file rather than this fork's; see the exclusions in
-        // `FORK-LICENSE.md` and the inventory in `NOTICE.md`. No `devenv.lock`
-        // is listed, because none exists -- `devenv.yaml:19-22` says so -- and a
-        // `.paths` entry with no file behind it is itself a closure failure.
         "flake.lock",
         "devenv.nix",
         "devenv.yaml",
         ".envrc",
-        // The fork's ignore rules travel with the package so a fetched copy
-        // keeps upstream's conventions and gains nothing by accident. Every
-        // rule above the appended block is upstream's own and is kept verbatim.
-        //
-        // The CI definitions under `.github/` and `appveyor.yml` are
-        // deliberately absent from this list: they build the upstream
-        // repository rather than this package, they are carried in the tree as
-        // imported material and hashed by UPSTREAM.sha256, and no step of this
-        // package runs them.
-        //
-        // `zig-pkg/` and the Nix and devenv working-tree artefacts are absent
-        // for the same reason `consumer/.zig-cache` is: they are build outputs
-        // and shell state, not package content.
         ".gitignore",
     },
 }
