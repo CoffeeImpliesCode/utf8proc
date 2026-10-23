@@ -46,7 +46,6 @@ The upstream C implementation, public header, generated data table, and test sou
 - `check` compiles the declared target configurations and does not run code. An explicit `-Dtarget` checks only that target.
 - There is no system-library mode. Libraries before 2.12.0 lack `utf8proc_free`, and 2.12.0 changed declared types without changing widths.
 - `package.nix` wraps the Zig build and selects linkage. The flake exposes static and shared outputs with static as default. The devenv shell provides tools and keeps task outputs and caches outside the checkout.
-- The pinned Nixpkgs revision predates Zig 0.17.0; flake and devenv extend its Zig recipe with the 0.17.0 release metadata.
 
 ## Platform boundaries
 

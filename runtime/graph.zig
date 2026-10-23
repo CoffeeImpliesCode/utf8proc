@@ -9,7 +9,8 @@ const std = @import("std");
 const sync_prefix = "utf8proc_rt";
 
 /// C-library declarations kept direct instead of resolved from the provider.
-/// The union is from Zig 0.16.0's selected libc headers; extra names are ignored, omissions can make loading fail.
+/// The union reflects libc headers selected with Zig 0.16.0. Extra names are ignored; omissions can make loading fail
+/// (observed with Zig 0.16; not rechecked on 0.17).
 /// Keep `utf8proc` exports out of this list.
 const libc_noise =
     \\_ASSERTE, _Exit, _LIBC_COUNT, _LIBC_SINGLE_BY_DEFAULT, _LIBC_SIZE,
