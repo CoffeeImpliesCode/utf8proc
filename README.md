@@ -37,12 +37,10 @@ Runtime loading is unavailable on WASI, Emscripten, and freestanding targets.
 
 ### Zig
 
-For a local dependency stored at `vendor/utf8proc`, add:
+Add the package to `build.zig.zon`:
 
-```zig
-.dependencies = .{
-    .utf8proc = .{ .path = "vendor/utf8proc" },
-},
+```sh
+zig fetch --save git+https://github.com/CoffeeImpliesCode/utf8proc#v2.12.0
 ```
 
 Import the module from `build.zig`:
